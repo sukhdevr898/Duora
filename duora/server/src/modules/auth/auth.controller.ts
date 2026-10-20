@@ -22,7 +22,7 @@ export const loginHandler = asyncHandler(async (req: Request, res: Response) => 
   if (input.device?.pushToken) {
     // Registration of the push token is best-effort during login and never
     // blocks authentication. The devices endpoint remains the canonical path.
-    const { upsertPushToken } = await import('../devices/devices.service.js');
+    const { upsertPushToken } = await import('../devices/devices.service');
     await upsertPushToken(result.user.id, {
       pushToken: input.device.pushToken,
       platform: input.device.platform,
