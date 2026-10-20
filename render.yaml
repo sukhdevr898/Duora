@@ -15,13 +15,21 @@ services:
     plan: free                 # personal use — sleeps after 15 min idle; wakes on request
     region: singapore          # closest to Jaipur/Rajasthan; change to oregon/frankfurt if preferred
     rootDir: duora/server
-    buildCommand: npm ci && npx prisma generate && npm run build
+    # --include=dev is REQUIRED: NODE_ENV=production (below) makes a bare `npm ci`
+    # skip devDependencies, so tsc/@types/node would be missing and the build fails
+    # with "Cannot find type definition file for 'node'".
+    # `npm run build` = `prisma generate && tsc -p tsconfig.json` → emits dist/server.js
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npx prisma migrate deploy && node dist/server.js
     healthCheckPath: /health
     autoDeploy: false          # manual deploys — flip to true after you verify
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: "22"              # pin Node 22 LTS — without this Render picks the
+                               # newest Node (26.x), which Prisma 6 + @types/node 20
+                               # are not built for. .node-version does the same.
       - key: PORT
         value: 10000           # Render injects PORT=10000; server reads env.PORT
       - key: DATABASE_URL
