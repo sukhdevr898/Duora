@@ -2,7 +2,9 @@ import { CallStatus, InvitationStatus } from '@prisma/client';
 import { prisma } from '../database/prisma';
 import { logger } from '../config/logger';
 
-const TICK_MS = 60_000;
+// Lightweight personal use: run every 5 minutes instead of 60s to save DB + wakeups on Render free tier.
+// RING_GRACE stays 90s — missed-call detection still happens on the next tick.
+const TICK_MS = 5 * 60_000;
 const RING_GRACE_MS = 90_000;
 
 /**

@@ -1,148 +1,88 @@
-# Duora
+# Duora — _Two hearts. One private space._
 
-**Two hearts. One private space.**
+Private 2-person communication: Expo Android app + lightweight Node server. Built for **personal use** — minimal server load, runs happily on **Render free tier**.
 
-A complete, private two-person communication platform: a React Native + Expo
-Android client and a Node.js + PostgreSQL backend, built as one organized
-monorepo.
-
-- **Frontend:** Expo SDK 57, React Native 0.86, TypeScript (strict), Expo Router
-- **Backend:** Node.js 20, Express, Socket.IO, Prisma + PostgreSQL, Firebase Admin (FCM)
-- **Calling:** real WebRTC via `react-native-webrtc` (development builds), short-lived TURN credentials
-- **Local data:** SQLite cache/offline outbox, SecureStore for session secrets
+> ✅ One-click deploy: [`render.yaml`](../render.yaml) (server + Postgres, free tier) → see [Deployment guide](docs/deployment.md#0-quickest-path-render-blueprint-recommended).
 
 ## Repository layout
 
 ```
 duora/
-├── app/      Expo Android application (routes in app/app, logic in app/src)
-├── server/   Express + Socket.IO API, Prisma schema, migrations, tests
-├── docs/     architecture, API, WebSocket protocol, Expo Go limits, builds, deployment, testing
-└── package.json   workspace scripts
+├── app/      Expo SDK 57 · RN 0.86 · TypeScript strict · Expo Router
+├── server/   Express + Socket.IO + Prisma/PostgreSQL (lightweight, ~120MB Alpine image)
+├── docs/     architecture, API, WebSocket, deployment (incl. Render)
+└── render.yaml  Blueprint for one-click Render deploy
 ```
 
-## Start in under five minutes
+## Start locally (under 5 minutes)
 
 ```bash
 # 1. Backend
-cd server
-cp .env.example .env            # set DATABASE_URL + JWT secrets
+cd duora/server
+cp .env.example .env            # only DATABASE_URL + 2 JWT secrets needed
 npm install
 npx prisma migrate dev
-npm run db:seed                 # optional: alice@duora.dev / bob@duora.dev (Password123!)
-npm run dev                     # http://localhost:4000
+npm run db:seed                 # optional: alice@duora.dev / bob@duora.dev Password123!
+npm run dev                     # http://localhost:4000  (health: /health, ready: /ready)
 
-# 2. App (separate terminal)
-cd app
-cp .env.example .env            # 10.0.2.2 works inside the Android emulator
+# 2. App (second terminal)
+cd duora/app
+cp .env.example .env            # 10.0.2.2 → emulator host
 npm install
-npx expo start                   # open in Expo Go
+npx expo start                  # Expo Go — all except native calls works
 ```
 
-Physical device? Replace `10.0.2.2` with your computer's LAN IP
-(e.g. `http://192.168.1.20:4000`) or a deployed HTTPS URL. Native calling needs
-a development build — see [`docs/android-build.md`](docs/android-build.md).
+Physical device → LAN IP (`192.168.1.x`), Render → `https://*.onrender.com`. Native calling needs a development build — see [`docs/android-build.md`](docs/android-build.md).
+
+### Deploy to Render (personal use, free)
+
+1. Push to GitHub → Render **New → Blueprint → Apply** (reads `render.yaml`)
+2. Set `PUBLIC_BASE_URL` to your Render URL in Dashboard → save → redeploy
+3. App: `EXPO_PUBLIC_API_BASE_URL="https://<your-service>.onrender.com/api/v1"` → restart expo
+
+Free tier sleeps after 15 min idle (~30s wake); app shows “Reconnecting”.
+
+Full guide: [`docs/deployment.md`](docs/deployment.md).
 
 ## What works where
 
-### Runs in Expo Go (verified by production bundle)
+### Expo Go (personal features, lightweight)
 
-Onboarding (3 pages, persisted) · register/login/refresh/logout/reset
-request · SecureStore sessions · pairing overview, short-lived invitation
-codes with countdown, QR generation and QR scanning with confirmation ·
-real-time one-to-one chat (optimistic send, pending/sent/delivered/read
-states, typing, reply, copy, delete-for-me/everyone, date separators, cursor
-pagination) · SQLite offline outbox with bounded jittered backoff and
-deduplicated reconnect sync · partner dashboard with real presence/last-seen ·
-partner note card from real messages · memories · full settings (theme,
-notifications, privacy, low-data) · profile · server settings and diagnostics ·
-about/legal · non-blocking update check · notification channels and
-permissions.
+Onboarding · auth (register/login/refresh/logout) · SecureStore · pairing (code invite with countdown + QR gen/scan with confirmation) · real-time chat (optimistic send, delivered/read, typing, reply/copy/delete, cursor pagination 40) · SQLite offline outbox with jittered backoff · partner dashboard with real presence · partner note · memories · settings (theme/notifications/privacy) · server settings/diagnostics · update check.
 
-### Requires a development build (implemented, verified at bundle/manifest level)
+All tuned for low server load: pagination + watermark sync, throttled typing (2.5s), no polling loops, 5-min cleanup job.
 
-Genuine WebRTC audio and video calls · `RTCView` remote/local video ·
-mute/speaker/Bluetooth routing · camera flip/toggle · call state machine
-(calling → ringing → connecting → connected → reconnecting/ended) · ICE
-restart on network change · foreground calling service with typed
-`microphone|camera|connectedDevice` permissions · full-screen incoming call
-intent · native picture-in-picture with config-change survival · FCM
-high-priority incoming-call push.
+### Development build (native calling)
 
-### Requires your infrastructure/credentials
+WebRTC audio/video (`RTCView`), mute/speaker/Bluetooth, camera flip/toggle, call state machine (calling→ringing→connecting→connected→reconnecting/ended), ICE restart, foreground service (`microphone|camera|connectedDevice`), full-screen incoming intent, PiP with config-change survival, FCM high-priority push.
 
-PostgreSQL · hosting over HTTPS/WSS · Firebase service account for FCM ·
-coturn for TURN relay · Play release URL for update enforcement · SMTP
-provider for password-reset emails · hosted URLs for avatars.
+See [`docs/expo-go-limitations.md`](docs/expo-go-limitations.md) for honest classification — Expo Go shows an upgrade panel, never fake media.
 
-## Security posture
+### Requires infrastructure (optional for personal use)
 
-- bcrypt (cost 12) password hashing; short-lived access JWTs; opaque refresh
-  tokens stored only as SHA-256 hashes, rotated and revocable
-- Authenticated REST and authenticated Socket.IO handshake; identity always
-  derived from the token, never request bodies
-- Zod validation on every endpoint and socket event; 1 MB payload caps
-- Rate limiters on login, registration, invitations, verification, message
-  send and call initiation
-- Pairing invitations are single-use, short-lived, attempt-capped and
-  completed transactionally server-side; QR codes carry opaque tokens only
-- Idempotent message delivery keyed on client UUIDs
-- Redacted structured logging; secrets only via environment variables
-- **No E2EE is claimed** — transport is HTTPS/WSS + DTLS/SRTP; at-rest
-  encryption is an operator responsibility
+| Need | When |
+|---|---|
+| PostgreSQL | Always (local Docker or Render free DB via blueprint) |
+| HTTPS/WSS | On Render automatic; locally HTTP OK |
+| FCM | **Optional** — without it chat/calls work while apps open; only background alerts need it |
+| TURN | **Optional** — STUN default handles home Wi-Fi; enable only for strict mobile NATs |
+| SMTP | Optional for password-reset email |
 
-## Verification results (executed in this environment)
+## Lightweight personal tuning
 
-| Check | Command | Result |
-| --- | --- | --- |
-| Server strict types | `npm --prefix server run typecheck` | ✅ clean |
-| Server unit tests | `npm --prefix server test` | ✅ 24/24 passing (4 suites, mocked Prisma) |
-| Prisma schema | `npx prisma validate` | ✅ valid |
-| App strict types | `npm --prefix app run typecheck` | ✅ clean |
-| Expo SDK alignment | `npx expo install --check` | ✅ dependencies up to date |
-| Android bundle | `npx expo export --platform android` | ✅ Hermes bundle produced |
-| Native prebuild | `npx expo prebuild --platform android` | ✅ manifest includes PiP flags, foreground service, all permissions |
+- **Server:** Alpine image (~120MB), 5-min cleanup, 25s socket heartbeat, `LOG_LEVEL=warn` on Render, attachments/TURN off by default, no Redis, single Prisma client.
+- **App:** 40-msg pages, watermark reconcile, exponential backoff with jitter, no aggressive polling, SecureStore for secrets, SQLite for offline.
+- **Cost:** free tier fits 2-person chat easily; TURN bandwidth is the only variable cost if you add coturn.
 
-Real two-device WebRTC/FCM/PiP testing cannot run in this environment and is
-not claimed as passing — the device checklist lives in
-[`docs/testing.md`](docs/testing.md).
+## Security (personal)
 
-## Known limitations
-
-1. Calling, background call services and PiP are implemented for custom
-   development builds only; Expo Go intentionally shows an upgrade panel. The
-   manifest, config plugin, `RTCView` call screens and the full TypeScript
-   `CallCoordinator` are in place; the foreground-service class and the
-   `enterPictureInPictureMode` bridge are two thin, explicitly documented
-   Kotlin seams inside the generated native project (see
-   [docs/android-build.md](docs/android-build.md#native-module-boundary-required-development-build-work)).
-2. Push is fully wired but inert until Firebase credentials are configured on
-   the server and an EAS/FCM project id is set on the client.
-3. Password reset validates and logs server-side; actual email delivery needs
-   an SMTP provider (no email service is bundled).
-4. Avatar editing accepts hosted image URLs; binary image upload is not part
-   of this build (attachment upload scaffolding exists in env/config).
-5. Single-service deployment: the socket registry is process-local. Horizontal
-   scaling adds the Socket.IO Redis adapter and a Redis rate-limit store
-   (documented in [`docs/deployment.md`](docs/deployment.md)).
-6. No end-to-end encryption; see the security section above.
-7. Ringing after force-stop, revoked permissions or unavailable FCM cannot be
-   guaranteed on modern Android versions.
+- bcrypt cost 12, short-lived JWT (15m) + rotated opaque refresh (SHA-256, revocable)
+- Auth on every REST + Socket.IO handshake — identity from token, never client body
+- Zod on every endpoint/event, 1MB caps, rate limits (gentle for 2 users)
+- Single-use short-lived pairing invites (10 min TTL, 5 attempt cap, transactional)
+- QR opaque tokens only, idempotent messages (client UUID), redacted logs
+- **No E2EE claimed** — HTTPS/WSS + DTLS/SRTP in transit; at-rest is your host's responsibility
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [HTTP API reference](docs/api.md)
-- [WebSocket events](docs/websocket-events.md)
-- [Expo Go limitations & feature classification](docs/expo-go-limitations.md)
-- [Android development builds, FCM & TURN](docs/android-build.md)
-- [Deployment](docs/deployment.md)
-- [Testing strategy & results](docs/testing.md)
-
-## Note on the pre-existing AmorCall project
-
-No AmorCall repository was present in the provided workspace at project start
-(verified by filesystem inspection). Duora was therefore built fresh; if the
-AmorCall codebase becomes available, its reusable assets/logic can be migrated
-module-by-module against the boundaries documented in
-[`docs/architecture.md`](docs/architecture.md).
+- [Architecture](docs/architecture.md) · [API](docs/api.md) · [WebSocket](docs/websocket-events.md) · [Expo Go limits](docs/expo-go-limitations.md) · [Android build](docs/android-build.md) · [Deployment (incl. Render)](docs/deployment.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md)

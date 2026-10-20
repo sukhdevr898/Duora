@@ -33,7 +33,15 @@ export function createApp(): Express {
     }),
   );
   app.use(express.json({ limit: '1mb' }));
-  app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/health' } }));
+  // Lightweight logging: skip /health + /ready, reduce verbosity on Render free tier.
+  // Logs are still structured (pino) but health noise doesn't wake up log drains.
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: { ignore: (req) => req.url === '/health' || req.url === '/ready' },
+      quietReqLogger: env.isProd,
+    }),
+  );
   app.use(globalLimiter);
 
   app.use(healthRouter);
