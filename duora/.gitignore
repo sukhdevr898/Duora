@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Expo
+app/.expo/
+app/dist/
+app/android/
+app/ios/
+app/web-build/
+expo-env.d.ts
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+*-serviceAccount*.json
+google-services.json
+GoogleService-Info.plist
+
+# Logs
+*.log
+npm-debug.*
+logs/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Prisma
+server/prisma/*.db
+server/prisma/migrations/dev.db*

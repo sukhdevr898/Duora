@@ -1,0 +1,84 @@
+{
+  "expo": {
+    "name": "Duora",
+    "slug": "duora",
+    "version": "1.0.0",
+    "scheme": "duora",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./assets/icons/icon.png",
+    "backgroundColor": "#100D17",
+    "splash": {
+      "image": "./assets/icons/splash-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#100D17",
+      "dark": { "backgroundColor": "#100D17" },
+      "light": { "backgroundColor": "#FBF8FF" }
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.duora.app",
+      "versionCode": 1,
+      "userInterfaceStyle": "automatic",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/adaptive-icon.png",
+        "backgroundColor": "#100D17",
+        "monochromeImage": "./assets/icons/adaptive-icon.png"
+      },
+      "permissions": [
+        "ACCESS_NETWORK_STATE",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH_CONNECT",
+        "POST_NOTIFICATIONS",
+        "USE_FULL_SCREEN_INTENT",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "FOREGROUND_SERVICE_CAMERA",
+        "FOREGROUND_SERVICE_CONNECTED_DEVICE",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Duora needs camera access to scan pairing QR codes and for video calls.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icons/notification-icon.png",
+          "color": "#B69CFF",
+          "sounds": []
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Duora uses the camera for video calls with your partner.",
+          "microphonePermission": "Duora uses the microphone for calls."
+        }
+      ],
+      "./plugins/withDuoraAndroid"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}
