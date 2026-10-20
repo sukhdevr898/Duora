@@ -4,7 +4,7 @@ Node.js + TypeScript for Duora: Express REST + authenticated Socket.IO, Prisma/P
 
 ## Requirements (local)
 
-- Node.js ≥ 20
+- Node.js 22 (pinned via `.node-version` + `engines`)
 - PostgreSQL ≥ 14 (or Neon/Supabase/Render Postgres — see `docs/configuration.md`)
 - Firebase / TURN: **optional** — without them chat + calls still work while both apps are open
 
@@ -44,9 +44,9 @@ curl http://localhost:4000/health && curl http://localhost:4000/ready
 | Script | Purpose |
 |---|---|
 | `npm run dev` | tsx watch |
-| `npm run build` | tsc → dist/ |
+| `npm run build` | `prisma generate` + tsc → `dist/server.js` |
 | `npm test` | Vitest (mocked Prisma, no DB) |
-| `npm run typecheck` | strict tsc |
+| `npm run typecheck` | strict tsc over src + tests + seed (`tsconfig.test.json`) |
 | `npm run prisma:migrate` | dev migration |
 | `npm run prisma:deploy` | prod migration (runs on Render start) |
 | `npm run db:seed` | demo couple |

@@ -58,7 +58,7 @@ export function createSocketServer(httpServer: HttpServer): Server {
       unregisterSocket(socket);
       logger.debug({ userId, reason }, 'socket disconnected');
       // Only flip offline when the user has no remaining devices connected.
-      const { isUserOnline, emitToUser } = await import('./socketState');
+      const { isUserOnline, emitToUser } = await import('./socketState.js');
       if (!isUserOnline(userId)) {
         await presenceService.touchOffline(userId).catch(() => undefined);
         const pairing = await findActivePairing(userId).catch(() => null);
