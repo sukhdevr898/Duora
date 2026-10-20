@@ -1,2 +1,0 @@
-# Duora
-React native
