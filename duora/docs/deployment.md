@@ -1,13 +1,46 @@
-# Deployment guide
+# Deployment guide — personal lightweight edition
 
-The server is a single modular Node.js service (Express + Socket.IO + Prisma).
-The first deployment intentionally avoids microservices; horizontal scaling is
-addressed at the end.
+This server is a **single-process** Node service (Express + Socket.IO + Prisma) designed for **2-person personal use** on Render's free tier. No microservices, no Redis, no heavy infrastructure.
 
-## 1. Provision PostgreSQL
+---
 
-Any managed Postgres (≥ 14) works — RDS, Neon, Supabase, Cloud SQL, or a local
-instance. Create a database and an application role:
+## 0. Quickest path: Render Blueprint (recommended)
+
+Render's free tier is perfect for Duora personal use: 750h/month, sleeps after 15 min idle, wakes on next request.
+
+1. Push this repo to GitHub (branch `arena/006c31fc-duora` or `main`).
+2. In Render: **New → Blueprint → Connect repository** → select your repo.
+3. Render reads `render.yaml` at the repo root and shows:
+   - `duora-server` (Node web service, free, region Singapore)
+   - `duora-db` (PostgreSQL, free, 256MB — ample for 2-person chat)
+4. Click **Apply** → Render generates `JWT_*` secrets and `DATABASE_URL` automatically.
+5. Wait for deploy (build: `npm ci && prisma generate && build` → start: `prisma migrate deploy && node dist/server.js`).
+6. Once live, open `https://<your-service>.onrender.com/health` → `{"status":"ok"}`.
+7. **Set your public URL:** Render Dashboard → duora-server → Environment → set `PUBLIC_BASE_URL` to `https://<your-service>.onrender.com` (the exact URL Render assigned), save → redeploy.
+8. Point the app at it:
+
+```env
+# duora/app/.env (then restart expo)
+EXPO_PUBLIC_API_BASE_URL="https://<your-service>.onrender.com/api/v1"
+EXPO_PUBLIC_WS_URL="https://<your-service>.onrender.com"
+EXPO_PUBLIC_ENV="production"
+```
+
+Free-tier note: after 15 min idle the service sleeps; the first request wakes it in ~30s. The app shows a gentle "Reconnecting…" banner — not an error.
+
+Blueprint file: [`/render.yaml`](../../render.yaml) — tweak region, plan, or autoDeploy there.
+
+### Manual Render (without blueprint)
+
+- **New → PostgreSQL** (free) → copy **Internal Database URL**.
+- **New → Web Service** → connect repo → Root Directory: `duora/server` → Build: `npm ci && npx prisma generate && npm run build` → Start: `npx prisma migrate deploy && node dist/server.js` → Health Check: `/health`.
+- Environment: `NODE_ENV=production`, `PORT=10000`, `DATABASE_URL=<Internal URL>`, generate two `JWT_*` secrets (`node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`), `PUBLIC_BASE_URL=https://<your-service>.onrender.com`, `LOG_LEVEL=warn`. Leave Firebase/TURN empty for lightweight.
+
+---
+
+## 1. Local / VPS PostgreSQL (alternative)
+
+Any managed Postgres (≥14) works — local, Neon, Supabase, Railway.
 
 ```sql
 CREATE DATABASE duora;
@@ -15,133 +48,103 @@ CREATE USER duora WITH ENCRYPTED PASSWORD '<strong-password>';
 GRANT ALL PRIVILEGES ON DATABASE duora TO duora;
 ```
 
-## 2. Configure environment
+## 2. Environment (only 3 required vars)
 
 ```bash
 cd server
 cp .env.example .env
 ```
 
-Minimum required values:
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Render/Neon URL or local `postgresql://...` |
+| `JWT_ACCESS_SECRET` | ✅ | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `JWT_REFRESH_SECRET` | ✅ | different value from above |
+| `FIREBASE_*` | optional | leave empty — push is skipped, chat still works via socket |
+| `TURN_*` | optional | leave empty — STUN handles most home Wi-Fi calls |
+| `ATTACHMENTS_ENABLED` | optional | default `false` for lightweight personal use |
 
-| Variable | Guidance |
-| --- | --- |
-| `DATABASE_URL` | `postgresql://duora:<password>@host:5432/duora?schema=public` |
-| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` — two distinct values |
-| `PUBLIC_BASE_URL` | Public HTTPS origin of the service |
-| `CORS_ORIGINS` | Comma-separated allowed origins (mobile clients send no Origin and are always permitted) |
-| `FIREBASE_*` | Service account for FCM (optional; push degrades gracefully) |
-| `TURN_SECRET`, `TURN_URLS`, `STUN_URLS` | coturn credentials for restrictive NATs |
-| `ANDROID_*` | Update-contract values and the verified Play release URL |
-
-Never commit `.env`. Production must expose the service over HTTPS/WSS only.
-
-## 3. Migrations and seed
+## 3. Migrations and start
 
 ```bash
 npm ci
-npx prisma migrate deploy     # applies committed migrations
-npx prisma generate           # client generation (also in Docker build)
-npm run db:seed               # optional demo data — skip in production
-npm run build
-npm start                     # node dist/server.js
+npx prisma migrate deploy   # on Render this runs automatically
+npx prisma generate
+npm run db:seed              # optional demo couple alice/bob Password123!
+npm run build && npm start   # locally: :4000, on Render: :10000
 ```
 
-`/ready` returns 503 until the database is reachable, suitable for load
-balancer health checks alongside `/health`.
+`GET /ready` → 503 until DB connects (use as health check), `GET /health` → always ok if process alive.
 
-## 4. Docker
-
-A multi-stage `Dockerfile` builds, generates the Prisma client, prunes dev
-dependencies and runs `prisma migrate deploy` before starting:
+## 4. Docker (lightweight Alpine)
 
 ```bash
 docker build -t duora-server:latest ./server
-docker run --rm --env-file ./server/.env -p 4000:4000 duora-server:latest
+docker run --rm --env-file ./server/.env -p 4000:10000 duora-server:latest
 ```
 
-Compose sketch for a full local stack (Postgres + server):
+Image is Alpine + tini, ~120MB, pruned dev deps. Compose for local Postgres:
 
 ```yaml
 services:
   db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: duora
-      POSTGRES_PASSWORD: duora
-      POSTGRES_DB: duora
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: duora, POSTGRES_PASSWORD: duora, POSTGRES_DB: duora }
     volumes: ["pgdata:/var/lib/postgresql/data"]
   api:
     build: ./server
     env_file: ./server/.env
-    ports: ["4000:4000"]
+    ports: ["4000:10000"]
     depends_on: [db]
-volumes:
-  pgdata:
+volumes: { pgdata: {} }
 ```
 
-## 5. Reverse proxy and WebSockets
+## 5. Reverse proxy (if self-hosting, not Render)
 
-Nginx must allow the Socket.IO upgrade:
+Nginx must allow Socket.IO upgrade:
 
 ```nginx
 location / {
-  proxy_pass http://127.0.0.1:4000;
+  proxy_pass http://127.0.0.1:10000;
   proxy_http_version 1.1;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection "upgrade";
-  proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_read_timeout 300s;
 }
 ```
 
-The app's `EXPO_PUBLIC_API_BASE_URL` becomes
-`https://api.example.com/api/v1` and `EXPO_PUBLIC_WS_URL` becomes
-`https://api.example.com` (Socket.IO upgrades to WSS automatically).
+## 6. Lightweight tuning for personal use (applied)
 
-## 6. Process and graceful shutdown
+- **Cleanup job:** every 5 min (was 60s) — expired invites/sessions + missed-call sweep, saves 4/5 DB wakeups.
+- **Socket heartbeat:** ping 25s / timeout 30s (was 20s/30s) — fewer packets for 2 users.
+- **Logging:** `pino-http` skips `/health`+`/ready`, `LOG_LEVEL=warn` on Render — less log drain I/O.
+- **Attachments:** default `false` — no disk I/O or object storage.
+- **TURN:** default `false` — no credential minting unless you configure coturn.
+- **Memory:** single Prisma client, no Redis, in-memory rate limiters (correct for 1 instance).
 
-Under systemd or a container orchestrator, SIGTERM triggers: stop accepting
-connections → close Socket.IO → close HTTP → disconnect Prisma → exit, with a
-10-second hard ceiling. The cleanup interval marks missed ringing calls,
-expired invitations and expired refresh sessions every 60 seconds.
+Cost note: TURN relay bandwidth (if you add coturn) and Render Postgres storage beyond free limits are the only variable costs — everything else fits free tier for 2-person chat.
 
-## 7. Push and TURN
+## 7. Graceful shutdown
 
-- FCM: grant the service account the Firebase Cloud Messaging Admin role;
-  invalid tokens are pruned automatically on send failure.
-- TURN: host coturn (see [android-build.md](./android-build.md)) and keep
-  `TURN_SECRET` identical on both sides. Relay bandwidth is separately metered
-  by your provider.
+On SIGTERM (Render deploy/stop): stop timers → close Socket.IO → close HTTP → disconnect Prisma → exit, 10s hard ceiling. Cold starts re-run `prisma migrate deploy` idempotently.
 
-## 8. Scaling beyond one instance
+## 8. Push & TURN (optional for personal use)
 
-The only process-local state is the socket registry
-(`server/src/websocket/socketState.ts`). To run multiple instances:
+Without them you still get: register/login, pairing, real-time chat, WebRTC calls while both apps are open. Push only matters for *background* alerts when the partner's app is closed.
 
-1. Add the Socket.IO Redis adapter (`@socket.io/redis-adapter`).
-2. Swap the in-memory express rate limiters for a Redis store.
-3. Keep Prisma/PostgreSQL as the single durable source of truth — no domain
-   data lives in memory.
+- **FCM:** add Firebase service account env vars later; invalid tokens auto-pruned.
+- **TURN:** host coturn and set `TURN_ENABLED=true` + `TURN_SECRET` + `TURN_URLS`.
 
-## 9. Security checklist
+## 9. Security checklist (personal)
 
-- [ ] HTTPS/WSS enforced; HSTS via `helmet` (already enabled)
-- [ ] Strong distinct JWT secrets; access tokens short-lived, refresh rotated
-- [ ] Rate limits tuned to your traffic
-- [ ] Database backups and retention for soft-deleted accounts
-- [ ] FCM service account key stored as a secret, never in git
-- [ ] Log redaction verified (authorization headers, tokens, SDP redacted)
-- [ ] CORS origins restricted for browser clients
-- [ ] TURN secret rotated periodically; credentials remain short-lived
+- [x] HTTPS/WSS on Render (automatic TLS + HSTS via helmet)
+- [x] Short-lived JWT + rotated refresh, bcrypt cost 12
+- [x] Rate limits (gentle — 5 reg/hour, 10 login/15m, 60 msg/min — fine for 2 users)
+- [ ] Rotate `render.yaml` generated JWT secrets if you ever expose logs
+- [ ] Don't commit `.env` or `*-serviceAccount*.json` (already in .gitignore)
 
-## 10. Data retention
+## 10. Data retention (personal)
 
-- `RefreshSession` expired rows are deleted by the cleanup job; logout/account
-  deletion revokes them immediately.
-- Account deletion is soft (`deletedAt`); define a hard-delete window per your
-  policy and schedule it against users, messages and call records.
-- "Delete for me" hides rows per user without destroying the partner's copy;
-  "delete for everyone" blanks content but preserves the record for receipt
-  integrity.
+- `RefreshSession` expired rows deleted every 5 min; logout revokes immediately.
+- Account delete is soft (`deletedAt`) — hard-delete manually if you truly want to wipe: `DELETE FROM users WHERE "deletedAt" IS NOT NULL;`.
+- "Delete for me" hides per-user; "delete for everyone" blanks content but keeps the row for receipt integrity.

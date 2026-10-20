@@ -10,13 +10,15 @@ import * as presenceService from '../modules/presence/presence.service';
 import { findActivePairing, partnerIdOf } from '../services/relationship.service';
 import { SocketEvents } from './events';
 
+// Lightweight tuning: fewer heartbeats saves CPU + bandwidth on Render free tier.
+// 25s ping / 30s timeout keeps 2-person presence accurate without aggressive polling.
 const HEARTBEAT_TIMEOUT_MS = 30_000;
 
 export function createSocketServer(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: { origin: env.corsOrigins.length > 0 ? env.corsOrigins : true, credentials: true },
     maxHttpBufferSize: 1_000_000, // 1 MB cap on signaling payloads
-    pingInterval: 20_000,
+    pingInterval: 25_000,
     pingTimeout: HEARTBEAT_TIMEOUT_MS,
   });
   bindIo(io);

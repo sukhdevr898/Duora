@@ -28,7 +28,7 @@ const schema = z.object({
   TURN_ENABLED: z
     .string()
     .optional()
-    .transform((v) => v !== 'false'),
+    .transform((v) => v === 'true'), // default OFF for personal/lightweight — enable explicitly
   TURN_SECRET: z.string().optional().default(''),
   TURN_TTL_SECONDS: numeric(3600),
   STUN_URLS: z.string().default('stun:stun.l.google.com:19302'),
@@ -36,7 +36,7 @@ const schema = z.object({
   ATTACHMENTS_ENABLED: z
     .string()
     .optional()
-    .transform((v) => v !== 'false'),
+    .transform((v) => v === 'true'), // default OFF for personal/lightweight
   ATTACHMENT_MAX_BYT: numeric(10 * 1024 * 1024),
   ATTACHMENT_DIR: z.string().default('./data/attachments'),
   ANDROID_LATEST_VERSION: z.string().default('1.0.0'),
