@@ -23,7 +23,7 @@ import { Btn, PressableScale } from '../src/components/ui';
 import { useToast } from '../src/components/Overlay';
 import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { useStore } from '../src/state/store';
-import { getApiBaseUrl, normalizeBaseUrl } from '../src/api/client';
+import { describeBaseUrl, normalizeBaseUrl } from '../src/api/client';
 
 const STATUS_COPY = {
   online: { label: 'Connected', sub: 'Everything is synced and secure', color: '#22c55e' },
@@ -250,7 +250,7 @@ export default function ServerScreen() {
             <View style={styles.endpoint}>
               <Globe2 size={11} strokeWidth={2.4} color={t.text3} />
               <Text style={[styles.endpointText, { color: t.text3 }]}>
-                {getApiBaseUrl().replace(/^https?:\/\//, '')}
+                {describeBaseUrl()}
               </Text>
             </View>
 

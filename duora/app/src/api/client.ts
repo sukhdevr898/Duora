@@ -34,12 +34,17 @@ const REFRESH_KEY = 'duora.refreshToken';
  */
 export const PRODUCTION_API_URL = 'https://duora.onrender.com';
 
+/** Marker for "call the API on the same origin". */
+export const RELATIVE_URL = 'relative';
+
 function resolveBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv && fromEnv.length > 0) return normalizeBaseUrl(fromEnv);
   const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
-  if (extra?.apiUrl) return normalizeBaseUrl(extra.apiUrl);
-  return PRODUCTION_API_URL;
+  const raw = fromEnv && fromEnv.length > 0 ? fromEnv : (extra?.apiUrl ?? PRODUCTION_API_URL);
+  // "relative" keeps the API on the same origin — handy behind a reverse
+  // proxy and for the browser preview.
+  if (raw === RELATIVE_URL || raw === 'same-origin' || raw === '/') return '';
+  return normalizeBaseUrl(raw);
 }
 
 /** `duora.onrender.com` → `https://duora.onrender.com` (no trailing slash). */
@@ -59,8 +64,13 @@ export function getApiBaseUrl(): string {
 
 /** Points the app at a different Duora server. */
 export function setApiBaseUrl(raw: string): string {
-  API_BASE_URL = normalizeBaseUrl(raw);
+  API_BASE_URL = raw === RELATIVE_URL || raw === 'same-origin' ? '' : normalizeBaseUrl(raw);
   return API_BASE_URL;
+}
+
+/** The address as it should be shown to a person. */
+export function describeBaseUrl(): string {
+  return API_BASE_URL ? API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '') : 'same origin';
 }
 
 let accessToken: string | null = null;
@@ -448,7 +458,11 @@ export async function pingServer(): Promise<{ ok: boolean; latencyMs: number; er
 export async function probeServer(
   rawUrl: string,
 ): Promise<{ ok: boolean; message: string; payload?: HealthPayload }> {
-  const url = normalizeBaseUrl(rawUrl);
+  const trimmed = (rawUrl ?? '').trim();
+  const url =
+    trimmed === RELATIVE_URL || trimmed === 'same-origin' || trimmed === ''
+      ? ''
+      : normalizeBaseUrl(trimmed);
   const t0 = Date.now();
   // A manual controller — `AbortSignal.timeout` is missing in Hermes.
   const controller = new AbortController();
