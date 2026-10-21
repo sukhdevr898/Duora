@@ -1,0 +1,27 @@
+{
+  "name": "duora-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Duora — front-end only React UI (premium mobile experience)",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173"
+  },
+  "dependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@fontsource/great-vibes": "^5.3.0",
+    "framer-motion": "^12.23.24",
+    "lucide-react": "^0.548.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.12"
+  }
+}
