@@ -30,6 +30,17 @@ npm run build      # static build in dist/
 Every control is interactive: tabs switch, calls connect (timer starts), messages send with
 optimistic ticks and a reply, sheets open/close, toasts confirm actions.
 
+### Brand-owned graphics
+
+Instead of relying on platform emoji (which render differently on Android, iOS and desktop),
+romantic accents are hand-drawn SVG so they look identical everywhere:
+
+- `components/RichText.tsx` — inline gradient hearts, sparkles, moons and stars used in
+  messages, quick replies, quote card and empty states
+- `components/Sticker.tsx` — 14 sticker designs (glossy heart faces + blushy emoji faces)
+  shown in the chat sticker sheet and reused as mood pickers in Notes
+- `components/Brand.tsx` — interlocking hearts logo, glossy 3D `HeartOrb`, welcome waves
+
 ## Stack
 
 - **React 19 + TypeScript (strict)** with Vite

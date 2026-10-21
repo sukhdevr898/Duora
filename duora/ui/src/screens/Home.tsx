@@ -1,5 +1,7 @@
 import {
   ChevronRight,
+  Clock3,
+  Heart,
   MessageSquare,
   NotebookPen,
   Phone,
@@ -8,6 +10,7 @@ import {
 import { Avatar } from '../components/Avatar';
 import { BottomNav } from '../components/BottomNav';
 import { HeartOrb, LogoHearts } from '../components/Brand';
+import { RichText } from '../components/RichText';
 import { partner, me } from '../data/mock';
 import { useRouter } from '../nav/router';
 
@@ -91,7 +94,7 @@ export function Home() {
           <div className="home__greeting">
             {greeting()}
             <strong>
-              My Love <span className="heart-emoji">💖</span>
+              My Love <RichText text="💖" size={19} />
             </strong>
           </div>
 
@@ -144,9 +147,25 @@ export function Home() {
             <div className="quote-card__text">
               You are <b>my today</b> and all of{' '}
               <b>
-                my tomorrows <span className="heart-emoji">💜</span>
+                my tomorrows <RichText text="💜" size={13} />
               </b>
             </div>
+          </div>
+
+          <div className="love-stats">
+            {[
+              { icon: Heart, value: '978', label: 'days together' },
+              { icon: MessageSquare, value: '12.4k', label: 'messages' },
+              { icon: Clock3, value: '9h 20m', label: 'calls this week' },
+            ].map(({ icon: Icon, value, label }) => (
+              <div key={label} className="love-stats__cell">
+                <span className="love-stats__icon">
+                  <Icon size={13} strokeWidth={2.3} />
+                </span>
+                <span className="love-stats__value">{value}</span>
+                <span className="love-stats__label">{label}</span>
+              </div>
+            ))}
           </div>
 
           <div
@@ -155,13 +174,11 @@ export function Home() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
-              padding: '18px 0 2px',
+              padding: '14px 0 2px',
             }}
           >
             <span className="t-caption">Together since 14 Feb 2024</span>
-            <span className="heart-emoji" style={{ fontSize: 10 }}>
-              💞
-            </span>
+            <RichText text="💞" size={10} />
           </div>
         </div>
       </div>

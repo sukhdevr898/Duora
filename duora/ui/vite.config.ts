@@ -9,9 +9,5 @@ export default defineConfig({
     strictPort: true,
     // The preview is served from a proxied host (e.g. 5173-<sandbox>.e2b.app)
     allowedHosts: true,
-    hmr: {
-      clientPort: 443,
-      protocol: 'wss',
-    },
   },
 });

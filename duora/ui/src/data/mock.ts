@@ -18,6 +18,7 @@ export type Message = {
   from: 'me' | 'her';
   text?: string;
   emoji?: string;
+  sticker?: string;
   time: string;
   status?: 'sent' | 'delivered' | 'read';
   reactions?: string[];
@@ -28,19 +29,13 @@ export const messages: Message[] = [
   { id: 'm2', from: 'me', text: 'how much', time: '10:02 am', status: 'read' },
   { id: 'm3', from: 'me', text: 'Call me 💖', time: '10:04 am', status: 'read' },
   { id: 'm4', from: 'me', text: 'Miss you ✨', time: '10:23 am', status: 'read', reactions: ['❤️'] },
-  { id: 'm5', from: 'her', emoji: '🥺', time: '10:23 am' },
+  { id: 'm5', from: 'her', sticker: 'shy', time: '10:23 am' },
   { id: 'm6', from: 'me', text: 'Call me 💖', time: '10:24 am', status: 'read' },
   { id: 'm7', from: 'me', text: 'hello', time: '10:28 am', status: 'delivered' },
 ];
 
-export const quickReplies = ['Miss you ✨', 'Call me 💖', '❤️', '🥺', 'Good night 🌙', 'Love you 💜'];
+export const quickReplies = ['Miss you ✨', 'Call me 💖', '❤️', 'Good night 🌙', 'Love you 💜'];
 
-export const emojis = [
-  '❤️', '😍', '🥰', '😘', '🫶', '💖', '💜',
-  '😂', '🥺', '😊', '😴', '😭', '😅', '🤭',
-  '✨', '💫', '🌸', '🌙', '☀️', '🎶', '🍫',
-  '💐', '🧸', '💍', '🍰', '☕', '🫂', '💌',
-];
 
 export type CallLog = {
   id: string;

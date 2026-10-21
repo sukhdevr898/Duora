@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { BottomNav } from '../components/BottomNav';
 import { Sheet, useToast } from '../components/Overlay';
+import { RichText } from '../components/RichText';
 import { me, partner } from '../data/mock';
 import { useRouter } from '../nav/router';
 
@@ -178,11 +179,7 @@ export function Settings() {
 
             <div className="settings-foot">
               <b>Duora v1.0.0</b>
-              Just You &amp; Me · made with{' '}
-              <span className="heart-emoji" style={{ fontSize: 10 }}>
-                💜
-              </span>{' '}
-              for two
+              Just You &amp; Me · made with <RichText text="💜" size={10} /> for two
             </div>
           </div>
         </div>

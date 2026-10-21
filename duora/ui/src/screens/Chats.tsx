@@ -3,6 +3,7 @@ import { Lock, Search } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { HeartOrb, LogoHearts, Sparkle } from '../components/Brand';
 import { useToast } from '../components/Overlay';
+import { RichText } from '../components/RichText';
 import { partner } from '../data/mock';
 import { useRouter } from '../nav/router';
 
@@ -43,8 +44,7 @@ export function Chats() {
 
             <h2 className="empty__title">No Chats Yet</h2>
             <p className="empty__sub">
-              Start a conversation with your special one{' '}
-              <span className="heart-emoji">💖</span>
+              Start a conversation with your special one <RichText text="💖" size={13} />
             </p>
 
             <motion.button

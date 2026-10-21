@@ -3,11 +3,13 @@ import { CalendarDays, Heart, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { BottomNav } from '../components/BottomNav';
 import { Sheet, useToast } from '../components/Overlay';
+import { RichText } from '../components/RichText';
+import { Sticker } from '../components/Sticker';
 import { notes as seed, type Note } from '../data/mock';
 import { useRouter } from '../nav/router';
 
 const noteImages = ['/img/note-1.jpg', '/img/note-2.jpg', '/img/note-3.jpg', '/img/note-4.jpg'];
-const moods = ['💖', '✨', '🌙', '🩷', '☀️'];
+const moods = ['heart-pink', 'heart-violet', 'heart-lilac', 'heart-peach', 'heart-mint'];
 
 export function Notes() {
   const { toast } = useToast();
@@ -17,7 +19,7 @@ export function Notes() {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [mood, setMood] = useState('💖');
+  const [mood, setMood] = useState(moods[0]);
 
   const save = () => {
     if (!title.trim()) {
@@ -26,7 +28,7 @@ export function Notes() {
     }
     const note: Note = {
       id: `n-${Date.now()}`,
-      title: `${title.trim()} ${mood}`,
+      title: title.trim(),
       lines: body
         .split('\n')
         .map((l) => l.trim())
@@ -75,7 +77,9 @@ export function Notes() {
                   <img src={note.image} alt="" loading="lazy" />
                 </span>
                 <span className="note-card__body">
-                  <span className="note-card__title">{note.title}</span>
+                  <span className="note-card__title">
+                    <RichText text={note.title} size={14} />
+                  </span>
                   <span className="note-card__lines">
                     {note.lines.map((line) => (
                       <span key={line}>{line}</span>
@@ -117,7 +121,7 @@ export function Notes() {
       <Sheet
         open={!!active}
         onClose={() => setActive(null)}
-        title={active?.title ?? ''}
+        titleNode={active ? <RichText text={active.title} size={17} /> : null}
         subtitle={active ? `${active.date} · saved in our space` : undefined}
       >
         {active && (
@@ -228,19 +232,19 @@ export function Notes() {
                 key={m}
                 type="button"
                 onClick={() => setMood(m)}
+                aria-label={`Mood ${m}`}
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 13,
                   display: 'grid',
                   placeItems: 'center',
-                  fontSize: 18,
                   background: mood === m ? 'var(--primary-soft)' : '#f8f6fd',
                   boxShadow: mood === m ? '0 0 0 1.5px var(--primary)' : 'none',
                   transition: 'all .18s ease',
                 }}
               >
-                <span className="heart-emoji">{m}</span>
+                <Sticker id={m} size={26} />
               </button>
             ))}
           </div>

@@ -148,6 +148,21 @@ img {
   .statusbar {
     padding-top: 16px;
   }
+  .frame .bottom-nav {
+    padding-bottom: 14px;
+  }
+  .frame .composer {
+    padding-bottom: 14px;
+  }
+  .frame .call-body {
+    padding-bottom: 22px;
+  }
+  .frame .video-bottom {
+    padding-bottom: 24px;
+  }
+  .frame .welcome__bottom {
+    padding-bottom: 26px;
+  }
   .frame {
     width: 420px;
     height: min(900px, calc(100dvh - 44px));
@@ -291,6 +306,15 @@ img {
 .script {
   font-family: var(--font-script);
   font-weight: 400;
+}
+.rich-text {
+  display: inline;
+}
+.rich-text > span {
+  display: inline;
+}
+.rich-text svg {
+  flex: 0 0 auto;
 }
 .heart-emoji {
   font-family:
@@ -893,6 +917,48 @@ img {
   color: #4a3f6d;
   letter-spacing: -0.1px;
 }
+.love-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 16px 20px 0;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 22px rgba(54, 32, 120, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+.love-stats__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 12px 6px 11px;
+  text-align: center;
+}
+.love-stats__cell + .love-stats__cell {
+  border-left: 1px solid var(--line);
+}
+.love-stats__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: var(--primary);
+  background: var(--primary-ghost);
+  margin-bottom: 2px;
+}
+.love-stats__value {
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+.love-stats__label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.1px;
+}
 .quote-card__text b {
   font-weight: 800;
   color: #342a55;
@@ -1163,14 +1229,18 @@ img {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .msg-row.out {
   justify-content: flex-end;
 }
+.bubble-wrap {
+  max-width: 78%;
+  min-width: 0;
+}
 .bubble {
   position: relative;
-  max-width: 76%;
+  max-width: 100%;
   padding: 10px 14px 8px;
   border-radius: 20px;
   font-size: 14px;
@@ -1306,6 +1376,7 @@ img {
 }
 .quick-chip {
   flex: 0 0 auto;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1441,6 +1512,36 @@ img {
   background-size: 26px 26px;
   opacity: 0.35;
   pointer-events: none;
+}
+.call-hearts {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.call-hearts span {
+  position: absolute;
+  bottom: -40px;
+  filter: drop-shadow(0 0 10px rgba(160, 120, 255, 0.35));
+  color: rgba(201, 174, 255, 0.34);
+  animation: drift linear infinite;
+}
+@keyframes drift {
+  0% {
+    transform: translateY(0) scale(0.8) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-105vh) scale(1.15) rotate(24deg);
+    opacity: 0;
+  }
 }
 .call-body {
   position: relative;
@@ -2153,22 +2254,37 @@ img {
   margin-bottom: 14px;
   line-height: 1.45;
 }
-.emoji-grid {
+.sticker-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-bottom: 4px;
 }
-.emoji-btn {
-  aspect-ratio: 1;
+.sticker-btn {
   display: grid;
   place-items: center;
-  font-size: 21px;
-  border-radius: 12px;
-  transition: transform 0.14s ease, background 0.2s ease;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  transition: transform 0.15s cubic-bezier(0.2, 0.9, 0.3, 1.3), background 0.2s ease;
 }
-.emoji-btn:active {
-  transform: scale(0.86);
+.sticker-btn:active {
+  transform: scale(0.88) rotate(-3deg);
   background: var(--surface-soft);
+}
+.sticker {
+  display: inline-block;
+  line-height: 0;
+  filter: drop-shadow(0 6px 12px rgba(54, 32, 120, 0.14));
+}
+.sticker svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.bubble__sticker {
+  display: block;
+  margin: -2px 0 2px;
 }
 .attach-grid {
   display: grid;

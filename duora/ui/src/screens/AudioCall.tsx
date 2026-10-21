@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Heart } from 'lucide-react';
 import {
   Mic,
   MicOff,
@@ -48,6 +49,26 @@ export function AudioCall() {
 
   return (
     <div className="call-screen">
+      <div className="call-hearts" aria-hidden="true">
+        {[
+          { left: '12%', size: 14, delay: 0, duration: 13 },
+          { left: '26%', size: 9, delay: 3.5, duration: 16 },
+          { left: '72%', size: 12, delay: 1.4, duration: 14 },
+          { left: '86%', size: 8, delay: 5.2, duration: 17 },
+          { left: '48%', size: 10, delay: 7.5, duration: 15 },
+        ].map((h, i) => (
+          <span
+            key={i}
+            style={{
+              left: h.left,
+              animationDelay: `${h.delay}s`,
+              animationDuration: `${h.duration}s`,
+            }}
+          >
+            <Heart size={h.size} fill="currentColor" strokeWidth={0} />
+          </span>
+        ))}
+      </div>
       <div className="call-body">
         <motion.div
           className="call-avatar"

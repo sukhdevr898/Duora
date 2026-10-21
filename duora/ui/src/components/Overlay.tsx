@@ -17,12 +17,14 @@ export function Sheet({
   open,
   onClose,
   title,
+  titleNode,
   subtitle,
   children,
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
+  titleNode?: ReactNode;
   subtitle?: string;
   children: ReactNode;
 }) {
@@ -48,7 +50,7 @@ export function Sheet({
             className="sheet"
             role="dialog"
             aria-modal="true"
-            aria-label={title}
+            aria-label={typeof title === 'string' ? title : 'Sheet'}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -56,7 +58,7 @@ export function Sheet({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sheet__grab" />
-            <div className="sheet__title">{title}</div>
+            <div className="sheet__title">{titleNode ?? title}</div>
             {subtitle && <div className="sheet__sub">{subtitle}</div>}
             {children}
           </motion.div>

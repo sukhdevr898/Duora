@@ -12,13 +12,15 @@ import {
   Plus,
   Send,
   Smile,
-  Sticker,
+  Sticker as StickerIcon,
   Video,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { Sheet, useToast } from '../components/Overlay';
-import { emojis, messages as seed, partner, quickReplies, type Message } from '../data/mock';
+import { RichText } from '../components/RichText';
+import { Sticker, stickers } from '../components/Sticker';
+import { messages as seed, partner, quickReplies, type Message } from '../data/mock';
 import { useRouter } from '../nav/router';
 
 const now = () =>
@@ -98,6 +100,33 @@ export function Conversation() {
     );
   };
 
+  const sendSticker = (stickerId: string) => {
+    const id = `me-${Date.now()}`;
+    setItems((prev) => [...prev, { id, from: 'me', sticker: stickerId, time: now(), status: 'sent' }]);
+    setEmojiOpen(false);
+    requestAnimationFrame(() => scrollToEnd(true));
+    window.setTimeout(() => {
+      setItems((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'read' as const } : m)));
+      setTyping(true);
+    }, 1400);
+    window.setTimeout(
+      () => {
+        setTyping(false);
+        setItems((prev) => [
+          ...prev,
+          {
+            id: `her-${Date.now()}`,
+            from: 'her',
+            text: replies[Math.floor(Math.random() * replies.length)],
+            time: now(),
+          },
+        ]);
+        requestAnimationFrame(() => scrollToEnd(true));
+      },
+      3400,
+    );
+  };
+
   const react = (id: string) => {
     setItems((prev) =>
       prev.map((m) => {
@@ -118,22 +147,20 @@ export function Conversation() {
           <button type="button" className="icon-btn ghost press" onClick={back} aria-label="Back">
             <ArrowLeft size={20} strokeWidth={2.4} />
           </button>
-          <button
-            type="button"
-            className="row press grow"
-            style={{ gap: 10, textAlign: 'left' }}
-            onClick={() => toast('Ruhi is online')}
-          >
+          <span onClick={() => toast('Ruhi is online')}>
             <Avatar src={partner.photo} size={36} online alt={partner.fullName} />
-            <span className="convo__who">
-              <span className="convo__name" style={{ display: 'block' }}>
-                {partner.name}
-              </span>
-              <span className="convo__status" style={typing ? { color: 'var(--primary-2)' } : undefined}>
-                {typing ? 'typing…' : 'Online'}
-              </span>
+          </span>
+          <div className="convo__who">
+            <span className="convo__name" style={{ display: 'block' }}>
+              {partner.name}
             </span>
-          </button>
+            <span
+              className="convo__status"
+              style={typing ? { color: 'var(--primary-2)' } : undefined}
+            >
+              {typing ? 'typing…' : 'Online'}
+            </span>
+          </div>
           <div className="convo__actions">
             <button
               type="button"
@@ -170,7 +197,14 @@ export function Conversation() {
 
           {items.map((m) => (
             <div key={m.id} className={`msg-row ${m.from === 'me' ? 'out' : 'in'}`}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'me' ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+              <div
+                className="bubble-wrap"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: m.from === 'me' ? 'flex-end' : 'flex-start',
+                }}
+              >
                 <motion.button
                   type="button"
                   layout
@@ -180,10 +214,14 @@ export function Conversation() {
                   className={`bubble ${m.from === 'me' ? 'out' : 'in'}`}
                   onClick={() => react(m.id)}
                 >
-                  {m.emoji ? (
+                  {m.sticker ? (
+                    <span className="bubble__sticker">
+                      <Sticker id={m.sticker} size={62} />
+                    </span>
+                  ) : m.emoji ? (
                     <span className="emoji-only heart-emoji">{m.emoji}</span>
                   ) : (
-                    m.text
+                    <RichText text={m.text ?? ''} size={14} sparkleColor="#E4D6FF" />
                   )}
                   <span className="bubble__meta">
                     {m.time}
@@ -209,7 +247,7 @@ export function Conversation() {
                   >
                     {m.reactions.map((r) => (
                       <button key={r} type="button" className="reaction" onClick={() => react(m.id)}>
-                        <span className="heart-emoji">{r}</span>
+                        <RichText text={r} size={13} />
                       </button>
                     ))}
                   </div>
@@ -240,7 +278,7 @@ export function Conversation() {
         <div className="quick-row">
           {quickReplies.map((q) => (
             <button key={q} type="button" className="quick-chip" onClick={() => send(q)}>
-              {q}
+              <RichText text={q} size={12.5} />
             </button>
           ))}
         </div>
@@ -271,7 +309,7 @@ export function Conversation() {
               type="button"
               className="composer__tool"
               onClick={() => setEmojiOpen(true)}
-              aria-label="Emoji"
+              aria-label="Stickers"
             >
               <Smile size={19} strokeWidth={2} />
             </button>
@@ -301,13 +339,19 @@ export function Conversation() {
       <Sheet
         open={emojiOpen}
         onClose={() => setEmojiOpen(false)}
-        title="Send some love"
-        subtitle="Tap an emoji to express what words can’t."
+        title="Stickers"
+        subtitle="Little ways to say it — handmade for your two hearts."
       >
-        <div className="emoji-grid">
-          {emojis.map((e) => (
-            <button key={e} type="button" className="emoji-btn" onClick={() => send(e)}>
-              <span className="heart-emoji">{e}</span>
+        <div className="sticker-grid">
+          {stickers.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="sticker-btn"
+              onClick={() => sendSticker(s.id)}
+              aria-label={`Send sticker ${s.id}`}
+            >
+              <Sticker id={s.id} size={54} />
             </button>
           ))}
         </div>
@@ -324,7 +368,7 @@ export function Conversation() {
             { icon: ImageIcon, label: 'Photos' },
             { icon: Camera, label: 'Camera' },
             { icon: Mic, label: 'Voice note' },
-            { icon: Sticker, label: 'Sticker' },
+            { icon: StickerIcon, label: 'Sticker' },
             { icon: Phone, label: 'Call' },
             { icon: Video, label: 'Video call' },
           ].map(({ icon: Icon, label }) => (
