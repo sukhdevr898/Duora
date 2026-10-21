@@ -8,15 +8,20 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  API_BASE_URL,
   api,
   ApiError,
+  describeError,
+  getApiBaseUrl,
   loadRefreshToken,
+  normalizeBaseUrl,
   pingServer,
+  probeServer,
   setAccessToken,
+  setApiBaseUrl,
   setUnauthorizedHandler,
   storeRefreshToken,
   withRetry,
+  type ErrorInfo,
 } from '../api/client';
 import type {
   CallLogItem,
@@ -32,6 +37,7 @@ import type {
 import type { AccentKey, ThemeMode } from '../theme/tokens';
 
 const THEME_KEY = 'duora.theme.v1';
+const SERVER_URL_KEY = 'duora.apiUrl.v1';
 
 type PersistedTheme = {
   themePreference: ThemeMode;
@@ -47,12 +53,22 @@ type Store = {
   /* ---------------- auth ---------------- */
   authStatus: AuthStatus;
   user: PublicUser | null;
-  authError: string | null;
+  /** The last sign-in / sign-up failure, already written for humans. */
+  authError: ErrorInfo | null;
   authBusy: boolean;
+  clearAuthError: () => void;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, displayName: string) => Promise<boolean>;
   logout: () => Promise<void>;
+
+  /* ---------------- which server ---------------- */
+  /** The address the app talks to (persisted, editable in Settings → Server). */
+  serverUrl: string;
+  serverUrlSaved: boolean;
+  loadServerUrl: () => Promise<void>;
+  setServerUrl: (url: string) => Promise<boolean>;
+  testServerUrl: (url: string) => Promise<{ ok: boolean; message: string }>;
 
   /* ---------------- appearance ---------------- */
   themePreference: ThemeMode;
@@ -115,8 +131,8 @@ const defaultServer: ServerInfo = {
   history: [],
   uptimeSeconds: 0,
   region: 'Singapore · ap-southeast',
-  apiBase: API_BASE_URL,
-  version: 'v2.0.0',
+  apiBase: getApiBaseUrl(),
+  version: 'v3.0.0',
   lastChecked: 0,
   autoReconnect: true,
   error: null,
@@ -129,8 +145,13 @@ export const useStore = create<Store>((set, get) => ({
   authError: null,
   authBusy: false,
 
+  clearAuthError: () => set({ authError: null }),
+
   bootstrap: async () => {
     set({ authStatus: 'loading' });
+    // The saved server address wins over the bundled default, so a broken
+    // deployment can be replaced without rebuilding the app.
+    await get().loadServerUrl();
     await get().hydrateTheme();
     const refreshToken = await loadRefreshToken();
     if (!refreshToken) {
@@ -158,18 +179,17 @@ export const useStore = create<Store>((set, get) => ({
   login: async (email, password) => {
     set({ authBusy: true, authError: null });
     try {
-      const result = await withRetry(() => api.login(email, password), 3, 2500);
-      set({ user: result.user, authStatus: 'authenticated', authBusy: false });
+      // A sleeping Render instance answers with its loading page — retry a
+      // few times before telling the user something went wrong.
+      const result = await withRetry(() => api.login(email, password), 3, 3000);
+      set({ user: result.user, authStatus: 'authenticated', authBusy: false, authError: null });
       await get().hydrateTheme();
       await get().pushSettings();
       await get().loadPairing();
       await get().refreshAll();
       return true;
     } catch (err) {
-      set({
-        authBusy: false,
-        authError: err instanceof ApiError ? err.message : 'Could not sign in',
-      });
+      set({ authBusy: false, authError: describeError(err) });
       return false;
     }
   },
@@ -177,17 +197,15 @@ export const useStore = create<Store>((set, get) => ({
   register: async (email, password, displayName) => {
     set({ authBusy: true, authError: null });
     try {
-      const result = await api.register(email, password, displayName);
-      set({ user: result.user, authStatus: 'authenticated', authBusy: false });
+      const result = await withRetry(() => api.register(email, password, displayName), 2, 3000);
+      set({ user: result.user, authStatus: 'authenticated', authBusy: false, authError: null });
+      await get().hydrateTheme();
       await get().pushSettings();
       await get().loadPairing();
       await get().refreshAll();
       return true;
     } catch (err) {
-      set({
-        authBusy: false,
-        authError: err instanceof ApiError ? err.message : 'Could not create the account',
-      });
+      set({ authBusy: false, authError: describeError(err) });
       return false;
     }
   },
@@ -205,6 +223,57 @@ export const useStore = create<Store>((set, get) => ({
       calls: [],
     });
   },
+
+  /* ---------------- which server ---------------- */
+  serverUrl: getApiBaseUrl(),
+  serverUrlSaved: false,
+
+  loadServerUrl: async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SERVER_URL_KEY);
+      if (raw) {
+        const url = normalizeBaseUrl(raw);
+        setApiBaseUrl(url);
+        set((prev) => ({
+          serverUrl: url,
+          serverUrlSaved: true,
+          server: { ...prev.server, apiBase: url },
+        }));
+      }
+    } catch {
+      /* storage unavailable — keep the bundled default */
+    }
+  },
+
+  setServerUrl: async (url) => {
+    const normalized = normalizeBaseUrl(url);
+    setApiBaseUrl(normalized);
+    try {
+      await AsyncStorage.setItem(SERVER_URL_KEY, normalized);
+    } catch {
+      /* storage unavailable — the address still applies for this session */
+    }
+    // The session belongs to the old server — start clean.
+    await storeRefreshToken(null);
+    setAccessToken(null);
+    set((prev) => ({
+      serverUrl: normalized,
+      serverUrlSaved: true,
+      user: null,
+      authStatus: 'anonymous',
+      authError: null,
+      home: null,
+      conversations: [],
+      messages: [],
+      notes: [],
+      calls: [],
+      server: { ...prev.server, apiBase: normalized, status: 'connecting', latency: 0 },
+    }));
+    await get().checkServer();
+    return true;
+  },
+
+  testServerUrl: async (url) => probeServer(url),
 
   /* ---------------- appearance ---------------- */
   themePreference: 'light',
@@ -324,6 +393,7 @@ export const useStore = create<Store>((set, get) => ({
         latency: result.latencyMs,
         history: [...prev.server.history.slice(-23), result.latencyMs],
         lastChecked: Date.now(),
+        apiBase: getApiBaseUrl(),
         error: result.error ?? null,
       },
     }));

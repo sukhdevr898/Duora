@@ -1,9 +1,11 @@
 /**
  * HTTP client for the Duora Node server.
  *
- * • base URL comes from EXPO_PUBLIC_API_URL (defaults to the Render deployment)
+ * • base URL comes from the app settings (so a broken deployment can be
+ *   swapped in-app), then EXPO_PUBLIC_API_URL, then app.json, then Render
  * • access tokens live in memory, refresh tokens in the device keystore
  * • a 401 triggers exactly one refresh + replay
+ * • every failure is turned into a friendly, human readable message
  */
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
@@ -24,7 +26,7 @@ import type {
 const REFRESH_KEY = 'duora.refreshToken';
 
 /**
- * Where the app talks to the API.
+ * Where the app talks to the API by default.
  *
  * 1. `EXPO_PUBLIC_API_URL` (build/dev env) — wins, handy for a LAN server.
  * 2. `expo.extra.apiUrl` in app.json — baked into the published build.
@@ -34,13 +36,32 @@ export const PRODUCTION_API_URL = 'https://duora.onrender.com';
 
 function resolveBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv && fromEnv.length > 0) return fromEnv.replace(/\/$/, '');
+  if (fromEnv && fromEnv.length > 0) return normalizeBaseUrl(fromEnv);
   const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
-  if (extra?.apiUrl) return extra.apiUrl.replace(/\/$/, '');
+  if (extra?.apiUrl) return normalizeBaseUrl(extra.apiUrl);
   return PRODUCTION_API_URL;
 }
 
-export const API_BASE_URL = resolveBaseUrl();
+/** `duora.onrender.com` → `https://duora.onrender.com` (no trailing slash). */
+export function normalizeBaseUrl(raw: string): string {
+  let url = (raw ?? '').trim();
+  if (!url) return PRODUCTION_API_URL;
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url.replace(/\/+$/, '');
+}
+
+/** Live binding — updated by `setApiBaseUrl` when the user changes the server. */
+export let API_BASE_URL = resolveBaseUrl();
+
+export function getApiBaseUrl(): string {
+  return API_BASE_URL;
+}
+
+/** Points the app at a different Duora server. */
+export function setApiBaseUrl(raw: string): string {
+  API_BASE_URL = normalizeBaseUrl(raw);
+  return API_BASE_URL;
+}
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
@@ -97,6 +118,11 @@ type RequestOptions = {
 
 /** Default request budget — a sleeping Render instance answers in ~30 s. */
 const DEFAULT_TIMEOUT_MS = 30_000;
+/**
+ * Signing in and signing up get a bigger budget: a cold Render free-tier
+ * instance can take a full minute to boot before it answers the first call.
+ */
+const AUTH_TIMEOUT_MS = 75_000;
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
@@ -187,6 +213,117 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Errors the user can act on                                         */
+/* ------------------------------------------------------------------ */
+
+export type ErrorKind =
+  | 'offline'
+  | 'waking'
+  | 'auth'
+  | 'conflict'
+  | 'validation'
+  | 'server'
+  | 'unknown';
+
+export type ErrorInfo = {
+  kind: ErrorKind;
+  /** Short headline — "Server is waking up". */
+  title: string;
+  /** The sentence under the headline. */
+  message: string;
+  /** Label of the recovery button. */
+  action: string;
+};
+
+/**
+ * Turns any failure into something a person can read and act on.
+ * The API never shows a raw status code to the user.
+ */
+export function describeError(error: unknown): ErrorInfo {
+  if (error instanceof ApiError) {
+    if (error.status === 0) {
+      if (error.code === 'not_ready') {
+        return {
+          kind: 'waking',
+          title: 'Server is waking up',
+          message:
+            'The Duora server is not answering yet — it may be asleep or still starting up. Give it a moment, then tap retry.',
+          action: 'Wake it up',
+        };
+      }
+      if (error.code === 'timeout') {
+        return {
+          kind: 'waking',
+          title: 'Server took too long',
+          message:
+            'The server did not answer in time. It may still be starting up — wait a moment and try again.',
+          action: 'Try again',
+        };
+      }
+      return {
+        kind: 'offline',
+        title: 'Cannot reach the server',
+        message:
+          'We could not reach the Duora server. Check your internet connection, or point the app at another server address.',
+        action: 'Try again',
+      };
+    }
+    if (error.status === 401) {
+      return {
+        kind: 'auth',
+        title: 'That did not match',
+        message: error.message || 'Email or password is wrong.',
+        action: 'Try again',
+      };
+    }
+    if (error.status === 403) {
+      return {
+        kind: 'auth',
+        title: 'Not allowed',
+        message: error.message || 'This account cannot do that yet.',
+        action: 'Try again',
+      };
+    }
+    if (error.status === 409) {
+      return {
+        kind: 'conflict',
+        title: 'Already taken',
+        message: error.message || 'That email is already registered.',
+        action: 'Sign in instead',
+      };
+    }
+    if (error.status === 400 || error.status === 422) {
+      return {
+        kind: 'validation',
+        title: 'Check the details',
+        message: error.message || 'Some of the details are not right.',
+        action: 'Fix it',
+      };
+    }
+    if (error.status >= 500) {
+      return {
+        kind: 'server',
+        title: 'The server stumbled',
+        message: 'The Duora server ran into a problem. Give it a moment and try again.',
+        action: 'Try again',
+      };
+    }
+    return {
+      kind: 'unknown',
+      title: 'Something went wrong',
+      message: error.message || `Request failed (${error.status}).`,
+      action: 'Try again',
+    };
+  }
+  return {
+    kind: 'unknown',
+    title: 'Something went wrong',
+    message: error instanceof Error ? error.message : 'Please try again.',
+    action: 'Try again',
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Endpoints                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -197,6 +334,7 @@ export const api = {
       method: 'POST',
       body: { email, password, displayName },
       auth: false,
+      timeoutMs: AUTH_TIMEOUT_MS,
     });
     accessToken = result.accessToken;
     await storeRefreshToken(result.refreshToken);
@@ -208,6 +346,7 @@ export const api = {
       method: 'POST',
       body: { email, password },
       auth: false,
+      timeoutMs: AUTH_TIMEOUT_MS,
     });
     accessToken = result.accessToken;
     await storeRefreshToken(result.refreshToken);
@@ -299,6 +438,48 @@ export async function pingServer(): Promise<{ ok: boolean; latencyMs: number; er
     return { ok: true, latencyMs: Date.now() - t0 };
   } catch (err) {
     return { ok: false, latencyMs: 0, error: err instanceof Error ? err.message : 'unreachable' };
+  }
+}
+
+/**
+ * Checks a candidate server address without touching the saved one.
+ * Used by the server screen so a wrong URL is obvious straight away.
+ */
+export async function probeServer(
+  rawUrl: string,
+): Promise<{ ok: boolean; message: string; payload?: HealthPayload }> {
+  const url = normalizeBaseUrl(rawUrl);
+  const t0 = Date.now();
+  // A manual controller — `AbortSignal.timeout` is missing in Hermes.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${url}/api/v1/health`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return { ok: false, message: `The server answered with ${response.status}.` };
+    }
+    try {
+      const payload = JSON.parse(text) as HealthPayload;
+      return {
+        ok: true,
+        message: `Connected in ${Date.now() - t0} ms · ${payload.version ?? 'server'} on ${payload.database?.driver ?? 'database'}.`,
+        payload,
+      };
+    } catch {
+      return {
+        ok: false,
+        message: 'That address answered, but it is not a Duora server yet.',
+      };
+    }
+  } catch (err) {
+    const info = describeError(err);
+    return { ok: false, message: info.message };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

@@ -29,6 +29,19 @@ To point it somewhere else (a laptop on your LAN, a staging server) set
 `EXPO_PUBLIC_API_URL` in `.env` — see [`.env.example`](./.env.example) — and restart
 the bundler.
 
+### Changing the server from inside the app
+
+The bundled address is only the **default**. Open **Settings → Server health →
+Server address** and you can:
+
+* **Test** an address — the app talks to `/api/v1/health` and tells you the
+  round-trip time, the server version and the database it uses.
+* **Save & connect** — the address is stored on the device and used from then
+  on. The old session is dropped (tokens belong to one server).
+
+That is the quickest way out of a broken or sleeping Render deployment without
+rebuilding the APK.
+
 Start the backend first if you run against a local server
 (see [`../server/README.md`](../server/README.md)):
 
@@ -37,7 +50,27 @@ cd ../server && npm install && npm run seed && npm run dev
 ```
 
 Sign in with the seeded account **sukhdev@duora.app / love1234**
-(partner: **ruhi@duora.app / love1234**).
+(partner: **ruhi@duora.app / love1234**). The sign-in sheet has a **Use it**
+button that fills the demo details for you.
+
+## Signing in and signing up
+
+The auth sheet is deliberately loud about problems, because a silent failure
+is the worst kind:
+
+| Situation | What the user sees |
+| --- | --- |
+| Empty / invalid field | Inline message under the field, red border |
+| Wrong email or password | *That did not match* — *Email or password is wrong* |
+| Email already registered | *Already taken* with a **Sign in instead** button |
+| Server asleep / booting | *Server is waking up* with **Wake it up** and **Change server** |
+| No route to the server | *Cannot reach the server* with **Try again** and **Change server** |
+| Server error (5xx) | *The server stumbled* — try again in a moment |
+
+Every failure keeps the sheet open with the typed values intact, the button
+turns into a spinner while the request is in flight, and the sheet shows a
+live **Connected · host** / **Cannot reach host** pill so it is always obvious
+whether the app can talk to the backend.
 
 ## Scripts
 
@@ -68,6 +101,7 @@ app/
 │   ├── api/             typed REST client (client.ts) + models (types.ts)
 │   ├── state/           single store: session, chat, notes, calls, pairing
 │   ├── components/      Duora design system (buttons, sheets, avatars, …)
+│   │                    Feedback.tsx = error cards, status pills, inline notes
 │   ├── theme/           tokens, fonts, ThemeProvider
 │   └── data/            settings section catalogue
 ├── assets/              brand icons, fonts, sounds
