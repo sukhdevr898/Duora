@@ -22,6 +22,7 @@ import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { fonts } from '../src/theme/fonts';
 import { ABSOLUTE_FILL } from '../src/theme/tokens';
 import { useStore } from '../src/state/store';
+import { describeBaseUrl } from '../src/api/client';
 
 const DEMO_EMAIL = 'sukhdev@duora.app';
 const DEMO_PASSWORD = 'love1234';
@@ -39,7 +40,6 @@ export default function WelcomeScreen() {
   const login = useStore((s) => s.login);
   const register = useStore((s) => s.register);
   const serverStatus = useStore((s) => s.server.status);
-  const serverUrl = useStore((s) => s.serverUrl);
   const checkServer = useStore((s) => s.checkServer);
 
   const [authOpen, setAuthOpen] = useState(false);
@@ -63,7 +63,7 @@ export default function WelcomeScreen() {
     void checkServer();
   }, [checkServer]);
 
-  const endpoint = serverUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const endpoint = describeBaseUrl();
 
   const statusLabel = useMemo(() => {
     if (serverStatus === 'online') return `Connected · ${endpoint}`;

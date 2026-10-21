@@ -29,6 +29,10 @@ To point it somewhere else (a laptop on your LAN, a staging server) set
 `EXPO_PUBLIC_API_URL` in `.env` — see [`.env.example`](./.env.example) — and restart
 the bundler.
 
+Set `EXPO_PUBLIC_API_URL="relative"` when the API is served from the same
+origin (reverse proxy, or the browser preview) — every request then goes to
+`/api/v1/*` on the current host.
+
 ### Changing the server from inside the app
 
 The bundled address is only the **default**. Open **Settings → Server health →

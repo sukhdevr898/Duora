@@ -246,7 +246,9 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   setServerUrl: async (url) => {
-    const normalized = normalizeBaseUrl(url);
+    const trimmed = (url ?? '').trim();
+    if (!trimmed) return false;
+    const normalized = normalizeBaseUrl(trimmed);
     setApiBaseUrl(normalized);
     try {
       await AsyncStorage.setItem(SERVER_URL_KEY, normalized);
