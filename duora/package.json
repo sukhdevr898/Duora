@@ -5,6 +5,8 @@
   "description": "Duora — Two hearts. One private space. Private two-person communication (Expo Android app + Node.js server).",
   "scripts": {
     "dev:app": "npm --prefix app run start",
+    "dev:ui": "npm --prefix ui run dev",
+    "build:ui": "npm --prefix ui run build",
     "dev:server": "npm --prefix server run dev",
     "build:server": "npm --prefix server run build",
     "test:server": "npm --prefix server test",

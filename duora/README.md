@@ -9,6 +9,7 @@ Private 2-person communication: Expo Android app + lightweight Node server. Buil
 ```
 duora/
 ├── app/      Expo SDK 57 · RN 0.86 · TypeScript strict · Expo Router
+├── ui/       Front-end-only premium React UI (Vite + TS) — design preview of every screen
 ├── server/   Express + Socket.IO + Prisma/PostgreSQL (lightweight, ~120MB Alpine image)
 ├── docs/     architecture, API, WebSocket, deployment (incl. Render)
 └── render.yaml  Blueprint for one-click Render deploy
