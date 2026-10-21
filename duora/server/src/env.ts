@@ -1,9 +1,12 @@
+/** Environment configuration and the logger. */
+import { z } from 'zod';
+import 'dotenv/config';
+import pino from 'pino';
+
 /**
  * Environment configuration. Every value is validated once at boot so a
  * misconfigured Render service fails loudly instead of at the first request.
  */
-import { z } from 'zod';
-import 'dotenv/config';
 
 const bool = (fallback: boolean) =>
   z
@@ -17,10 +20,17 @@ const schema = z.object({
   HOST: z.string().default('0.0.0.0'),
 
   /**
-   * postgres://user:pass@host/db  → Postgres driver (Render managed DB)
-   * anything else               → embedded SQLite file (local dev / single instance)
+   * The one value that matters:
+   *   postgresql://…  → Supabase Postgres (production on Render)
+   *   file:./data/…   → embedded SQLite (local development)
    */
   DATABASE_URL: z.string().default('file:./data/duora.db'),
+
+  /** How often to retry the database connection while it wakes up. */
+  DB_CONNECT_ATTEMPTS: z.coerce.number().int().positive().default(12),
+  DB_CONNECT_DELAY_MS: z.coerce.number().int().positive().default(5000),
+  /** `sqlite` lets the server boot with a local file if Postgres is unreachable. */
+  DB_FALLBACK: z.enum(['none', 'sqlite']).default('none'),
 
   JWT_ACCESS_SECRET: z.string().min(16).default('duora-dev-access-secret-change-me'),
   JWT_REFRESH_SECRET: z.string().min(16).default('duora-dev-refresh-secret-change-me'),
@@ -30,7 +40,7 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default(''),
   PUBLIC_BASE_URL: z.string().default(''),
   LOG_LEVEL: z.string().default('info'),
-  APP_VERSION: z.string().default('2.0.0'),
+  APP_VERSION: z.string().default('3.0.0'),
   REGION: z.string().default('Singapore · ap-southeast'),
   PAIRING_TTL_MINUTES: z.coerce.number().int().positive().default(10),
   SEED_ON_BOOT: bool(false),
@@ -55,3 +65,11 @@ export const env = {
     .filter(Boolean),
   logLevel: raw.LOG_LEVEL as 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace',
 };
+
+export const logger = pino({
+  level: env.isProd ? env.logLevel : 'info',
+  base: { service: 'duora-server' },
+  transport: env.isProd
+    ? undefined
+    : { target: 'pino/file', options: { destination: 1 } },
+});

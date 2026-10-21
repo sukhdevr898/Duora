@@ -1,6 +1,11 @@
-import { db } from '../../db/client';
-import { nowIso } from '../../utils/ids';
-import { ensureSettings } from '../users/users.service';
+/** User settings (theme, accent, notifications …). */
+import { db } from '../db';
+import { nowIso, asyncHandler } from '../util';
+import { ensureSettings } from './users';
+import { Router } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../auth';
+import { validate } from '../http';
 
 export type Settings = {
   theme: 'light' | 'dark' | 'system';
@@ -102,3 +107,35 @@ export async function updateSettings(
   }
   return getSettings(userId);
 }
+
+const patchSchema = z.object({
+  theme: z.enum(['light', 'dark', 'system']).optional(),
+  accent: z.enum(['violet', 'rose', 'sunset', 'mint']).optional(),
+  loveMode: z.boolean().optional(),
+  heartMotion: z.boolean().optional(),
+  glass: z.boolean().optional(),
+  messageNotifications: z.boolean().optional(),
+  callNotifications: z.boolean().optional(),
+  ringtone: z.string().max(40).optional(),
+  vibration: z.boolean().optional(),
+  hidePreview: z.boolean().optional(),
+  lowData: z.boolean().optional(),
+});
+
+export const settingsRouter = Router();
+settingsRouter.use(requireAuth);
+
+settingsRouter.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    res.json({ settings: await getSettings(req.user!.id) });
+  }),
+);
+
+settingsRouter.patch(
+  '/',
+  validate(patchSchema),
+  asyncHandler(async (req, res) => {
+    res.json({ settings: await updateSettings(req.user!.id, req.body as never) });
+  }),
+);

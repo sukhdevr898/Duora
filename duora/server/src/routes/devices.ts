@@ -1,10 +1,16 @@
+/** Push token registration. */
+import { z } from 'zod';
 import { Router } from 'express';
-import { asyncHandler } from '../../utils/asyncHandler';
-import { requireAuth } from '../../middleware/auth.middleware';
-import { validate } from '../../middleware/validate.middleware';
-import { db } from '../../db/client';
-import { id, nowIso } from '../../utils/ids';
-import { deviceSchema } from './devices.schema';
+import { asyncHandler, id, nowIso } from '../util';
+import { requireAuth } from '../auth';
+import { validate } from '../http';
+import { db } from '../db';
+
+export const deviceSchema = z.object({
+  pushToken: z.string().min(8),
+  platform: z.enum(['android', 'ios', 'web']),
+  deviceId: z.string().max(120).optional(),
+});
 
 export const devicesRouter = Router();
 devicesRouter.use(requireAuth);

@@ -1,8 +1,30 @@
-import { db } from '../../db/client';
-import { env } from '../../config/env';
-import { ApiError } from '../../utils/ApiError';
-import { id, nowIso, pairingCode, pairingToken } from '../../utils/ids';
-import { findById, toPublicUser, type UserRow } from '../users/users.service';
+/** Pairing by 6-character code or QR code. */
+import { z } from 'zod';
+import { db } from '../db';
+import { env } from '../env';
+import { ApiError, id, nowIso, pairingCode, pairingToken, asyncHandler } from '../util';
+import { findById, toPublicUser, type UserRow } from './users';
+import { Router } from 'express';
+import { requireAuth } from '../auth';
+import { validate } from '../http';
+
+export const acceptByCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(6, 'The pairing code has 6 characters')
+    .max(6, 'The pairing code has 6 characters')
+    .regex(/^[A-Za-z0-9]+$/, 'The pairing code only uses letters and numbers')
+    .transform((s) => s.toUpperCase()),
+});
+
+export const acceptByTokenSchema = z.object({
+  token: z.string().min(8),
+});
+
+export const scanSchema = z.object({
+  data: z.string().min(8),
+});
 
 export type PairingPhase = 'idle' | 'outgoing' | 'incoming' | 'matched';
 
@@ -284,3 +306,62 @@ export async function conversationIdFor(userId: string): Promise<string | null> 
 }
 
 export { toPublicUser };
+
+export const pairingRouter = Router();
+pairingRouter.use(requireAuth);
+
+/** Everything the Pairing screen needs in one call. */
+pairingRouter.get(
+  '/status',
+  asyncHandler(async (req, res) => {
+    res.json(await statusFor(req.user!.id));
+  }),
+);
+
+/** Create / refresh the 6-char code + QR payload. */
+pairingRouter.post(
+  '/invitation',
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await createInvitation(req.user!.id));
+  }),
+);
+
+/** Partner entered a code. */
+pairingRouter.post(
+  '/accept',
+  validate(acceptByCodeSchema),
+  asyncHandler(async (req, res) => {
+    const { code } = req.body as { code: string };
+    res.json(await acceptByCode(req.user!.id, code));
+  }),
+);
+
+/** Partner scanned a QR code. */
+pairingRouter.post(
+  '/scan',
+  validate(acceptByTokenSchema),
+  asyncHandler(async (req, res) => {
+    const { token } = req.body as { token: string };
+    res.json(await acceptByToken(req.user!.id, token));
+  }),
+);
+
+/** Raw QR payload → token (supports `duora://pair?token=…` and bare tokens). */
+pairingRouter.post(
+  '/resolve',
+  validate(scanSchema),
+  asyncHandler(async (req, res) => {
+    const raw = (req.body as { data: string }).data.trim();
+    const token = raw.includes('token=')
+      ? new URL(raw.replace('duora://', 'https://')).searchParams.get('token') ?? ''
+      : raw;
+    res.json({ token });
+  }),
+);
+
+pairingRouter.delete(
+  '/',
+  asyncHandler(async (req, res) => {
+    res.json(await unlink(req.user!.id));
+  }),
+);

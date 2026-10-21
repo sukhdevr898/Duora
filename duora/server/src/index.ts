@@ -1,13 +1,25 @@
+/** Boot: wait for the database, migrate, seed, listen. */
 import { createServer } from 'node:http';
-import { env } from './config/env';
-import { logger } from './config/logger';
+import { env, logger } from './env';
 import { createApp } from './app';
-import { migrate } from './db/migrate';
-import { createSocketServer } from './websocket/socket';
+import { db, migrate, useSqliteFallback, waitForDatabase } from './db';
+import { createSocketServer } from './realtime';
 import { seed } from './seed';
 
 async function main(): Promise<void> {
+  try {
+    await waitForDatabase();
+  } catch (err) {
+    if (env.DB_FALLBACK === 'sqlite') {
+      useSqliteFallback();
+    } else {
+      logger.error({ err }, 'startup failed');
+      process.exit(1);
+    }
+  }
+
   await migrate();
+
   if (env.SEED_ON_BOOT) {
     await seed({ quiet: true });
   }
@@ -21,7 +33,7 @@ async function main(): Promise<void> {
       {
         port: env.PORT,
         env: env.NODE_ENV,
-        driver: env.isPostgres ? 'postgres' : 'sqlite',
+        driver: db().dialect,
         realtime: 'socket.io',
       },
       `Duora server ready → http://${env.HOST}:${env.PORT}`,
@@ -39,7 +51,7 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
-main().catch((err) => {
-  logger.error({ err: err instanceof Error ? err.stack : String(err) }, 'server failed to start');
+void main().catch((err) => {
+  logger.error({ err }, 'fatal startup error');
   process.exit(1);
 });

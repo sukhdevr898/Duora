@@ -15,7 +15,7 @@ HTTP status (`400` validation, `401` unauthorized, `404` not found, `409` confli
 ### `GET /health`
 
 ```json
-{"status":"operational","version":"2.0.0","region":"Singapore · ap-southeast",
+{"status":"operational","version":"3.0.0","region":"Singapore · ap-southeast",
  "database":{"driver":"postgres","status":"operational"},"services":[…]}
 ```
 
@@ -189,7 +189,15 @@ Unlinks the pair. The conversation disappears from the chat list; memories stay.
 
 ### `GET /api/v1/calls` → `200` 🔒 → `{ "calls": [ … ] }`
 ### `POST /api/v1/calls` → `201` 🔒 — `{ "kind": "voice" | "video" }` → `{ "call": {…} }`
-### `POST /api/v1/calls/:callId/end` → `200` 🔒 → `{ "call": {…} }`
+### `POST /api/v1/calls/:callId/end` → `200` 🔒
+
+```json
+{ "call": { "id": "call_…", "type": "Outgoing Call", "kind": "voice", "missed": false,
+             "time": "10:04 pm", "day": "Today", "duration": "1m 12s", "clock": "22:04" } }
+```
+
+The body is optional — `{"outcome":"ENDED"}` (default), `DECLINED`, `CANCELLED`,
+`MISSED` or `FAILED`.
 
 ---
 

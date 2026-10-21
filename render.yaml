@@ -1,25 +1,23 @@
 # ---------------------------------------------------------------------------
-# Duora — Render blueprint
+# Duora — Render blueprint (one click)
 #
 #   Render → New → Blueprint → connect this repo → Apply
 #
-# Creates:
-#   1. duora-server — a Node web service running the Express + Socket.IO API
-#      (Dockerfile in duora/server/Dockerfile)
-#   2. duora-db     — a managed PostgreSQL instance (free tier, 2 people is plenty)
+# Creates ONE thing:
+#   duora — a Node web service running the Express + Socket.IO API
+#           (Dockerfile in duora/server/Dockerfile)
 #
-# The API migrates the schema on every boot, so there is no separate migration
-# step. Point the mobile app at the service URL:
-#      EXPO_PUBLIC_API_URL=https://duora.onrender.com
+# The database is Supabase Postgres (you already have the project), so there is
+# nothing to provision here. The only value you have to paste is the Supabase
+# connection string — Render asks for it while creating the blueprint:
+#
+#   Supabase → Project Settings → Database → Connection string → URI
+#   → reset the password if you have never seen it
+#   → use the pooled host (…pooler.supabase.com) because Render has no IPv6
+#
+# Everything else is filled in for you: the JWT secrets are generated, the
+# schema is created on the first boot, and the demo couple is seeded.
 # ---------------------------------------------------------------------------
-
-databases:
-  - name: duora-db
-    databaseName: duora
-    user: duora
-    plan: free
-    postgresMajorVersion: "16"
-    region: singapore
 
 services:
   - type: web
@@ -37,10 +35,10 @@ services:
         value: production
       - key: PORT
         value: 10000
+      # ↓↓↓  The only value you paste in. Supabase → Settings → Database.
       - key: DATABASE_URL
-        fromDatabase:
-          name: duora-db
-          property: connectionString
+        sync: false
+      # Render generates the two signing secrets for you.
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -50,7 +48,7 @@ services:
       - key: REFRESH_TTL_DAYS
         value: 30
       - key: APP_VERSION
-        value: 2.0.0
+        value: 3.0.0
       - key: REGION
         value: Singapore · ap-southeast
       - key: PAIRING_TTL_MINUTES
@@ -61,5 +59,11 @@ services:
           type: web
           name: duora
           envVarKey: RENDER_EXTERNAL_URL
+      # Creates the schema on boot and fills the demo couple.
       - key: SEED_ON_BOOT
         value: "true"
+      # How long to keep retrying while Supabase wakes up (12 × 5 s = 1 minute).
+      - key: DB_CONNECT_ATTEMPTS
+        value: "12"
+      - key: DB_CONNECT_DELAY_MS
+        value: "5000"
