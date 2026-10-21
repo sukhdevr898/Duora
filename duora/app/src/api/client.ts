@@ -23,12 +23,21 @@ import type {
 
 const REFRESH_KEY = 'duora.refreshToken';
 
+/**
+ * Where the app talks to the API.
+ *
+ * 1. `EXPO_PUBLIC_API_URL` (build/dev env) — wins, handy for a LAN server.
+ * 2. `expo.extra.apiUrl` in app.json — baked into the published build.
+ * 3. The live Render deployment.
+ */
+export const PRODUCTION_API_URL = 'https://duora.onrender.com';
+
 function resolveBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
   if (fromEnv && fromEnv.length > 0) return fromEnv.replace(/\/$/, '');
   const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
   if (extra?.apiUrl) return extra.apiUrl.replace(/\/$/, '');
-  return 'https://duora-server.onrender.com';
+  return PRODUCTION_API_URL;
 }
 
 export const API_BASE_URL = resolveBaseUrl();
@@ -82,13 +91,24 @@ type RequestOptions = {
   body?: unknown;
   auth?: boolean;
   signal?: AbortSignal;
+  /** Milliseconds before the request is aborted. */
+  timeoutMs?: number;
 };
 
+/** Default request budget — a sleeping Render instance answers in ~30 s. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true, signal } = options;
+  const { method = 'GET', body, auth = true, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (auth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+  // Abort slow requests so the UI never hangs on a sleeping server.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromCaller = () => controller.abort();
+  signal?.addEventListener('abort', abortFromCaller);
 
   let response: Response;
   try {
@@ -96,17 +116,32 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal,
+      signal: controller.signal,
     });
   } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw err;
+    if ((err as Error)?.name === 'AbortError') {
+      throw new ApiError(0, 'timeout', 'The server took too long to answer');
+    }
     throw new ApiError(0, 'network_error', 'Cannot reach the Duora server');
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abortFromCaller);
   }
 
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
-  const data = text ? (JSON.parse(text) as unknown) : {};
+
+  // Render answers with an HTML "application loading" page while the free
+  // instance boots — that is not JSON, so treat it as "not ready yet".
+  let data: unknown = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      throw new ApiError(0, 'not_ready', 'The server is waking up — try again in a moment');
+    }
+  }
 
   if (!response.ok) {
     const error = (data as { error?: { code?: string; message?: string } }).error;
@@ -258,11 +293,29 @@ export const api = {
 export async function pingServer(): Promise<{ ok: boolean; latencyMs: number; error?: string }> {
   const t0 = Date.now();
   try {
-    await request<HealthPayload>('/api/v1/health', { auth: false });
+    // Short budget: a sleeping Render instance answers with a loading page,
+    // the heartbeat then retries until the service is really up.
+    await request<HealthPayload>('/api/v1/health', { auth: false, timeoutMs: 12_000 });
     return { ok: true, latencyMs: Date.now() - t0 };
   } catch (err) {
     return { ok: false, latencyMs: 0, error: err instanceof Error ? err.message : 'unreachable' };
   }
+}
+
+/** Retries `fn` while it fails with a transport error (server waking up). */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 2500): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      const transport = err instanceof ApiError && err.status === 0;
+      if (!transport || attempt === attempts - 1) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
 }
 
 export type { ServerInfo };

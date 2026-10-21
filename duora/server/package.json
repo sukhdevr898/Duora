@@ -2,7 +2,7 @@
   "name": "duora-server",
   "version": "2.0.0",
   "private": true,
-  "description": "Duora backend \u2014 Express + Socket.IO + SQLite/Postgres. Two people, one app.",
+  "description": "Duora backend — Express + Socket.IO + SQLite/Postgres. Two people, one app.",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -37,7 +37,7 @@
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "node": "22.x"

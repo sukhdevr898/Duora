@@ -7,7 +7,17 @@
  */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, ApiError, loadRefreshToken, pingServer, setAccessToken, setUnauthorizedHandler, storeRefreshToken } from '../api/client';
+import {
+  API_BASE_URL,
+  api,
+  ApiError,
+  loadRefreshToken,
+  pingServer,
+  setAccessToken,
+  setUnauthorizedHandler,
+  storeRefreshToken,
+  withRetry,
+} from '../api/client';
 import type {
   CallLogItem,
   ChatMessage,
@@ -65,6 +75,7 @@ type Store = {
   server: ServerInfo;
   checkServer: () => Promise<void>;
   setAutoReconnect: (value: boolean) => void;
+  simulateOutage: () => void;
   health: { status: string; latencyMs: number; uptimeSeconds: number; services: { name: string; label: string; status: string; latencyMs: number; detail: string }[]; database: { driver: string; status: string; latencyMs: number }; version: string; region: string; checks: { name: string; ok: boolean; detail: string }[] } | null;
   loadHealth: () => Promise<void>;
 
@@ -104,7 +115,7 @@ const defaultServer: ServerInfo = {
   history: [],
   uptimeSeconds: 0,
   region: 'Singapore · ap-southeast',
-  apiBase: 'https://duora-server.onrender.com',
+  apiBase: API_BASE_URL,
   version: 'v2.0.0',
   lastChecked: 0,
   autoReconnect: true,
@@ -127,13 +138,19 @@ export const useStore = create<Store>((set, get) => ({
       return;
     }
     try {
-      const user = await api.me();
+      // The free Render instance may still be booting — retry a few times
+      // before giving up on the stored session.
+      const user = await withRetry(() => api.me(), 3, 3000);
       set({ user, authStatus: 'authenticated' });
       await get().loadPairing();
       await get().refreshAll();
-    } catch {
-      await storeRefreshToken(null);
-      setAccessToken(null);
+    } catch (err) {
+      // Only a rejected session clears the token; a network blip keeps it so
+      // the next launch signs the user straight back in.
+      if (err instanceof ApiError && err.status === 401) {
+        await storeRefreshToken(null);
+        setAccessToken(null);
+      }
       set({ authStatus: 'anonymous', user: null });
     }
   },
@@ -141,7 +158,7 @@ export const useStore = create<Store>((set, get) => ({
   login: async (email, password) => {
     set({ authBusy: true, authError: null });
     try {
-      const result = await api.login(email, password);
+      const result = await withRetry(() => api.login(email, password), 3, 2500);
       set({ user: result.user, authStatus: 'authenticated', authBusy: false });
       await get().hydrateTheme();
       await get().pushSettings();
@@ -328,6 +345,13 @@ export const useStore = create<Store>((set, get) => ({
 
   setAutoReconnect: (value) => {
     set((prev) => ({ server: { ...prev.server, autoReconnect: value } }));
+  },
+
+  /** Mirrors the web build's "Simulate outage" — the heartbeat reconnects. */
+  simulateOutage: () => {
+    set((prev) => ({
+      server: { ...prev.server, status: 'offline', latency: 0, error: 'Simulated outage' },
+    }));
   },
 
   health: null,

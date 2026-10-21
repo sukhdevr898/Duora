@@ -10,7 +10,7 @@
 #
 # The API migrates the schema on every boot, so there is no separate migration
 # step. Point the mobile app at the service URL:
-#      EXPO_PUBLIC_API_URL=https://duora-server.onrender.com
+#      EXPO_PUBLIC_API_URL=https://duora.onrender.com
 # ---------------------------------------------------------------------------
 
 databases:
@@ -23,15 +23,15 @@ databases:
 
 services:
   - type: web
-    name: duora-server
+    name: duora
     runtime: docker
     dockerfilePath: ./duora/server/Dockerfile
     dockerContext: ./duora/server
     plan: free
     region: singapore
     healthCheckPath: /health
-    # Manual deploys — flip to true once you are happy with the first release.
-    autoDeploy: false
+    # Every merge to main ships straight to the live API.
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -46,7 +46,7 @@ services:
       - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: ACCESS_TTL
-        value: 30d
+        value: 1h
       - key: REFRESH_TTL_DAYS
         value: 30
       - key: APP_VERSION
@@ -59,7 +59,7 @@ services:
       - key: PUBLIC_BASE_URL
         fromService:
           type: web
-          name: duora-server
+          name: duora
           envVarKey: RENDER_EXTERNAL_URL
       - key: SEED_ON_BOOT
         value: "true"

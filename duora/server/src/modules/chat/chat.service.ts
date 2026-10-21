@@ -89,6 +89,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
                        SELECT id FROM messages WHERE conversation_id = c.id)), '1970-01-01')
              ) AS unread
        FROM conversations c
+       LEFT JOIN pairings prg ON prg.id = c.pairing_id
        LEFT JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.user_id = ?
        LEFT JOIN users p ON p.id = (SELECT user_id FROM conversation_participants
                                       WHERE conversation_id = c.id AND user_id <> ? LIMIT 1)
@@ -96,7 +97,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
        LEFT JOIN presence pr ON pr.user_id = p.id
        LEFT JOIN messages lm ON lm.id = (SELECT id FROM messages WHERE conversation_id = c.id
                                           ORDER BY created_at DESC LIMIT 1)
-      WHERE cp.user_id = ?
+      WHERE cp.user_id = ? AND prg.status = 'ACTIVE'
       ORDER BY c.updated_at DESC`,
     [userId, userId, userId, userId, userId, userId],
   );

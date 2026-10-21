@@ -1,197 +1,104 @@
 # Environment & secrets setup
 
-Duora has **two** `.env` files (both are gitignored — only `.env.example` is
+Duora has **two** environment files (both gitignored — only `.env.example` is
 committed):
 
 ```
 duora/
-├── server/.env    # secrets, database URL, Firebase, TURN
+├── server/.env    # secrets, database URL, deployment metadata
 └── app/.env       # public client config (EXPO_PUBLIC_* only — never put secrets here)
 ```
 
-The server validates its environment with Zod on boot: a missing required
-variable produces a readable error instead of a runtime crash.
+The server validates its environment with Zod on boot: an invalid value produces a
+readable error instead of a runtime crash.
 
 ---
 
 ## 1. Server `.env`
 
 ```bash
-cd server
+cd duora/server
 cp .env.example .env
 ```
 
-### What is actually required?
+### What is required?
 
-Only **three** values are mandatory. Everything else has a working default or
-degrades gracefully (push is skipped, TURN falls back to STUN-only).
+Only **three** values are mandatory. Everything else has a working default.
 
 | Variable | Required? | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `JWT_ACCESS_SECRET` | ✅ | min 16 chars, use 64+ random hex |
+| `DATABASE_URL` | ✅ | `file:./data/duora.db` (SQLite) or `postgresql://…` (Postgres) |
+| `JWT_ACCESS_SECRET` | ✅ | min 16 chars — use 64+ random hex |
 | `JWT_REFRESH_SECRET` | ✅ | a **different** random value |
-| `FIREBASE_*` | optional | needed only for background push |
-| `TURN_SECRET` / `TURN_URLS` | optional | needed for calls across restrictive NATs |
-| all others | optional | sensible defaults in `.env.example` |
+| `NODE_ENV` | optional | `development` (default) / `production` / `test` |
+| `PORT` / `HOST` | optional | `4000` / `0.0.0.0` — Render injects `PORT` |
+| `ACCESS_TTL` | optional | access-token lifetime, default `30d` |
+| `REFRESH_TTL_DAYS` | optional | refresh-token lifetime in days, default `30` |
+| `PUBLIC_BASE_URL` | optional | public URL of the deployment — used to build avatar/photo links |
+| `CORS_ORIGINS` | optional | comma separated; empty = allow any origin (mobile sends no `Origin`) |
+| `SEED_ON_BOOT` | optional | `true` seeds the demo couple on boot (used on Render) |
+| `LOG_LEVEL` | optional | `fatal｜error｜warn｜info｜debug｜trace` |
+| `REGION` | optional | label shown in the app's server-health screen |
+| `APP_VERSION` | optional | version shown in the app |
+| `PAIRING_TTL_MINUTES` | optional | lifetime of a 6-character pairing code, default `10` |
 
 ### 1a. Generate the JWT secrets
 
-Run twice (once per secret — they must differ):
+Run twice — they must differ:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Paste the two outputs into `.env`:
-
 ```env
 JWT_ACCESS_SECRET="a1b2…first-output…"
-JWT_REFRESH_SECRET="c3d4…second-output…"
+JWT_REFRESH_SECRET="c7d8…second-output…"
 ```
 
-### 1b. Get a `DATABASE_URL`
+### 1b. Pick the database
 
-The format is always:
-
-```
-postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public
-```
-
-Pick **one** of the three options below.
-
-#### Option A — Docker (fastest local setup)
-
-```bash
-docker run --name duora-postgres \
-  -e POSTGRES_USER=duora \
-  -e POSTGRES_PASSWORD=duora \
-  -e POSTGRES_DB=duora \
-  -p 5432:5432 -d postgres:16
-```
-
-Then:
+**SQLite (default — zero setup)**
 
 ```env
-DATABASE_URL="postgresql://duora:duora@localhost:5432/duora?schema=public"
+DATABASE_URL="file:./data/duora.db"
 ```
 
-#### Option B — PostgreSQL installed natively
+The file lives in `duora/server/data/`. The schema is applied on boot, so there is
+nothing else to run.
 
-```bash
-# macOS
-brew install postgresql@16 && brew services start postgresql@16
-createdb duora
-```
-
-```bash
-# Ubuntu/Debian
-sudo apt install postgresql
-sudo -u postgres createuser --pwprompt duora   # prompts for a password
-sudo -u postgres createdb -O duora duora
-```
+**Postgres (Render managed DB, Neon, Supabase, Railway …)**
 
 ```env
-DATABASE_URL="postgresql://duora:YOUR_PASSWORD@localhost:5432/duora?schema=public"
+DATABASE_URL="postgresql://duora:password@host:5432/duora?sslmode=require"
 ```
 
-#### Option C — free cloud database (no local install)
+The same schema is applied automatically — `src/db/migrate.ts` picks
+`schema.postgres.sql` or `schema.sqlite.sql` based on the URL scheme.
 
-Sign up, create a Postgres project, and copy the connection string:
-
-- **Neon** (neon.tech) → New project → "Connection string" tab. Append
-  `?sslmode=require` if not present. Use the **direct** (non-pooled) string
-  for `prisma migrate`.
-- **Supabase** → Project → Settings → Database → Connection string → URI,
-  replace `[YOUR-PASSWORD]` with the DB password you set at creation.
-- **Railway / Render** → add a PostgreSQL service → copy the provided
-  `DATABASE_URL` variable verbatim.
-
-```env
-DATABASE_URL="postgresql://duora:password@ep-cool-name-12345.us-east-2.aws.neon.tech/duora?sslmode=require"
-```
-
-### 1c. Apply the schema
-
-Once `DATABASE_URL` is set:
+### 1c. Seed the demo couple (optional)
 
 ```bash
-cd server
+cd duora/server
 npm install
-npx prisma migrate deploy     # applies prisma/migrations/20261019000000_init
-npm run db:seed               # optional demo couple (alice/bob, Password123!)
+npm run seed        # sukhdev@duora.app / love1234 · ruhi@duora.app / love1234
 npm run dev
 ```
 
 Success looks like:
 
 ```
-Database connection established
-Duora server listening on :4000 (development)
+database connection ready
+schema ready
+Duora server ready → http://0.0.0.0:4000
 ```
 
-Verify: `curl http://localhost:4000/health` → `{"status":"ok",…}` and
-`curl http://localhost:4000/ready` → database `up`.
-
-### 1d. Firebase credentials (only for push notifications)
-
-1. Go to <https://console.firebase.google.com> → create (or open) a project.
-2. Add an Android app with package name **`com.duora.app`**.
-3. Gear icon → **Project settings** → **Service accounts** tab →
-   **Generate new private key** → a JSON file downloads. Keep it out of git.
-
-Then choose **one** of two ways to configure it:
-
-**Way 1 — point at the JSON file (recommended for local dev):**
-
-```env
-FIREBASE_SERVICE_ACCOUNT_PATH="/absolute/path/to/duora-firebase-adminsdk.json"
-```
-
-**Way 2 — split the JSON into env vars (needed for most cloud hosts):**
-
-Open the JSON and copy three fields. The private key is multiline; inside
-`.env` keep it on one line with literal `\n` sequences (the server converts
-them automatically):
-
-```env
-FIREBASE_PROJECT_ID="duora-1a2b3"
-FIREBASE_CLIENT_EMAIL="firebase-adminsdk-xyz@duora-1a2b3.iam.gserviceaccount.com"
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEv…\n…\n-----END PRIVATE KEY-----\n"
-```
-
-Without any Firebase config the server logs a warning once and simply skips
-push sends — sockets, auth and chat all keep working.
-
-### 1e. TURN secret (only for calls across strict NATs)
-
-STUN (Google's default in `.env.example`) needs no account and works for most
-home Wi-Fi. Add TURN when testing between mobile networks/carrier-grade NAT.
-See [android-build.md](./android-build.md) for installing coturn, then:
+Verify:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-```env
-TURN_SECRET="paste-the-random-hex-here"
-TURN_URLS="turn:turn.yourdomain.com:3478,turns:turn.yourdomain.com:5349"
-```
-
-The server turns this into short-lived per-user credentials; the permanent
-secret is never sent to the app.
-
-### Minimal working local `server/.env`
-
-```env
-NODE_ENV=development
-PORT=4000
-DATABASE_URL="postgresql://duora:duora@localhost:5432/duora?schema=public"
-PUBLIC_BASE_URL="http://10.0.2.2:4000"
-CORS_ORIGINS=""
-JWT_ACCESS_SECRET="run-node-command-above-paste-here"
-JWT_REFRESH_SECRET="run-node-command-again-paste-different-value-here"
-LOG_LEVEL=info
+curl http://127.0.0.1:4000/api/v1/health
+curl -X POST http://127.0.0.1:4000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"sukhdev@duora.app","password":"love1234"}'
 ```
 
 ---
@@ -199,99 +106,76 @@ LOG_LEVEL=info
 ## 2. App `.env`
 
 ```bash
-cd app
+cd duora/app
 cp .env.example .env
 ```
 
-Only variables prefixed `EXPO_PUBLIC_` are exposed to the app, and they are
-**inlined into the bundle at build time** — after changing them you must
-restart `npx expo start`. Never put server secrets here; anything in this file
-ships inside the APK.
+| Variable | Required? | Notes |
+| --- | --- | --- |
+| `EXPO_PUBLIC_API_URL` | optional | overrides the API base URL — everything else is derived from it |
 
-### The networking rule (the important part)
+Resolution order in `src/api/client.ts`:
 
-`localhost` on an Android device means *the device itself*, not your computer.
+1. `EXPO_PUBLIC_API_URL` (dev/build env) — wins, handy for a laptop on your LAN.
+2. `expo.extra.apiUrl` in `app.json` — baked into a published build.
+3. `https://duora.onrender.com` — the live deployment (the default).
 
-| Where the app runs | `EXPO_PUBLIC_API_BASE_URL` / `WS_URL` host |
-| --- | --- |
-| Android emulator on your computer | `10.0.2.2` (Android's alias for the host machine) |
-| Physical phone, same Wi-Fi as your computer | your computer's **LAN IP**, e.g. `192.168.1.20` |
-| Deployed server | your public `https://` domain |
-
-Find your LAN IP:
-
-```bash
-# macOS / Linux
-ip addr show | grep "inet " | grep -v 127.0.0.1
-# Windows
-ipconfig        # look for "IPv4 Address"
-```
-
-Also allow port 4002 through your OS firewall (the server already listens on
-all interfaces via `httpServer.listen(PORT)`).
-
-### Configurations
-
-**Emulator (defaults work as-is):**
+The WebSocket endpoint is derived from the same base URL, so there is nothing else
+to configure.
 
 ```env
-EXPO_PUBLIC_API_BASE_URL="http://10.0.2.2:4000/api/v1"
-EXPO_PUBLIC_WS_URL="http://10.0.2.2:4000"
-EXPO_PUBLIC_ENV="development"
+# production (default — you can simply leave this unset)
+EXPO_PUBLIC_API_URL="https://duora.onrender.com"
+
+# local server, Android emulator
+EXPO_PUBLIC_API_URL="http://10.0.2.2:4000"
+
+# local server, physical device on the same Wi-Fi
+EXPO_PUBLIC_API_URL="http://192.168.1.20:4000"
 ```
 
-**Physical device over LAN:**
-
-```env
-EXPO_PUBLIC_API_BASE_URL="http://192.168.1.20:4000/api/v1"
-EXPO_PUBLIC_WS_URL="http://192.168.1.20:4000"
-EXPO_PUBLIC_ENV="development"
-```
-
-**Production (HTTPS is mandatory — Socket.IO upgrades to WSS automatically):**
-
-```env
-EXPO_PUBLIC_API_BASE_URL="https://api.yourdomain.com/api/v1"
-EXPO_PUBLIC_WS_URL="https://api.yourdomain.com"
-EXPO_PUBLIC_ENV="production"
-EXPO_PUBLIC_EAS_PROJECT_ID="your-expo-project-id"
-```
-
-Get the EAS project id from <https://expo.dev> (create a project, then
-`eas init`), or run `eas init` inside `app/`. It enables Expo push tokens;
-for standalone FCM delivery also upload the FCM key under your Expo project's
-credentials page.
-
-`EXPO_PUBLIC_VERSION_ENDPOINT` can stay empty — the app then calls the
-server's built-in `/api/v1/app/version` contract.
+> Never put a secret in the app bundle: everything prefixed with `EXPO_PUBLIC_` is
+> inlined into the JS bundle and is readable by anyone who has the app.
 
 ---
 
-## 3. Verify the whole chain
+## 3. Production deployment
 
-1. Server: `curl http://localhost:4000/ready` → `{"status":"ready","database":"up"}`.
-2. App: open **Settings → Server settings → Test connection** — reachability,
-   socket state and auth status are shown separately.
-3. Register a user in the app, then check the row landed in Postgres:
+| | |
+| --- | --- |
+| API base URL | `https://duora.onrender.com` |
+| Health | `https://duora.onrender.com/health` · `/api/v1/health` |
+| Realtime | `wss://duora.onrender.com/socket.io` |
+| Accounts | `sukhdev@duora.app / love1234` · `ruhi@duora.app / love1234` |
 
-```bash
-# Docker example
-docker exec -it duora-postgres psql -U duora -d duora -c "SELECT email, \"displayName\" FROM users;"
+Environment for the Render web service (see [`render.yaml`](../render.yaml)):
+
+```env
+NODE_ENV=production
+DATABASE_URL=postgresql://…            # wired from the managed database
+JWT_ACCESS_SECRET=…                    # generated by Render
+JWT_REFRESH_SECRET=…                   # generated by Render
+PUBLIC_BASE_URL=https://duora.onrender.com
+ACCESS_TTL=1h
+REFRESH_TTL_DAYS=30
+SEED_ON_BOOT=true
+LOG_LEVEL=info
+REGION=Singapore · ap-southeast
 ```
 
-4. **Developer info → Run diagnostics / Export redacted report** for a
-   shareable, secret-free snapshot when troubleshooting.
+The free tier sleeps after 15 minutes idle; the first request wakes it in ~30 s.
+The app shows “Reconnecting”, retries in the background and switches to
+“Connected” on its own.
 
-## 4. Rules of thumb
+---
 
-- Never commit `.env`, `*-serviceAccount*.json`, or `google-services.json`
-  (all already in `.gitignore`).
-- On cloud hosts (Railway, Render, Fly, EAS Build) set the same server
-  variables in the dashboard's *environment variables* screen instead of a
-  file; for EAS use `eas secret:create`.
-- Rotate a leaked secret immediately: replace it in `.env`, restart the
-  server (JWTs re-sign; refresh sessions can be revoked by deleting the
-  `refresh_sessions` table contents).
-- A reachable server does not prove auth/chat/push work individually — use the
-  in-app Server Settings and Developer Info screens, which report each
-  subsystem separately.
+## 4. Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Server exits with “Invalid environment configuration” | a variable failed Zod validation | the error lists the offending keys — fix them in `.env` |
+| App says “Cannot reach the Duora server” | `EXPO_PUBLIC_API_URL` points at a host your device cannot see | use the LAN IP for phones, `10.0.2.2` for the Android emulator |
+| App says “The server is waking up — try again in a moment” | Render answered with its loading page while the instance boots | wait a few seconds; the heartbeat retries automatically |
+| Login returns “Email or password is wrong” | the demo couple was never seeded | run `npm run seed`, or set `SEED_ON_BOOT=true` on Render |
+| Avatars / photos 404 | `PUBLIC_BASE_URL` is wrong | set it to the public URL of the deployment |
+| `tsconfig.json(5,25): error TS5108` | a TypeScript 7 compiler with the legacy `node10` resolution | `duora/server/tsconfig.json` uses `module`/`moduleResolution: Node16` — pull the latest |

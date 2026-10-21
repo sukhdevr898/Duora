@@ -39,12 +39,15 @@ The schema is applied on boot, so there is no separate migration command.
 ```bash
 cd duora/app
 npm install
-EXPO_PUBLIC_API_URL=http://localhost:4000 npx expo start
+npx expo start                   # → https://duora.onrender.com (production API)
 ```
+
+The app ships pointing at the live deployment **`https://duora.onrender.com`** — no
+environment variable needed. To run against your own server, set
+`EXPO_PUBLIC_API_URL` (see [`app/.env.example`](./app/.env.example)):
 
 - Android emulator → `http://10.0.2.2:4000`
 - Physical device → your LAN IP (`http://192.168.x.x:4000`)
-- Render → `https://<your-service>.onrender.com`
 
 Sign in with the seeded account **sukhdev@duora.app / love1234** (partner: **ruhi@duora.app / love1234**).
 
@@ -53,11 +56,25 @@ Sign in with the seeded account **sukhdev@duora.app / love1234** (partner: **ruh
 1. Push to GitHub → Render **New → Blueprint → Apply** (reads [`render.yaml`](../render.yaml)).
 2. The blueprint builds [`duora/server/Dockerfile`](./server/Dockerfile), creates a managed
    PostgreSQL and wires `DATABASE_URL` automatically.
-3. Point the app at it: `EXPO_PUBLIC_API_URL=https://duora-server.onrender.com`.
+3. Point the app at it: `EXPO_PUBLIC_API_URL=https://duora.onrender.com`.
 
 The free tier sleeps after 15 minutes idle (~30 s wake-up). The app shows
 “Reconnecting” while the server wakes — the `ConnectionPill` and the Server-health
-screen reflect the live state.
+screen reflect the live state, and a background heartbeat retries every few seconds
+until the service answers again.
+
+### Production API
+
+| | |
+|---|---|
+| Base URL | `https://duora.onrender.com` |
+| Health | `https://duora.onrender.com/health` · `/api/v1/health` |
+| Realtime | `wss://duora.onrender.com/socket.io` |
+| Accounts | `sukhdev@duora.app / love1234` · `ruhi@duora.app / love1234` |
+
+The service is built from [`server/Dockerfile`](./server/Dockerfile) with
+**TypeScript 7** (`module`/`moduleResolution: Node16`), so the image compiles on
+Render's builder.
 
 ## What the app does
 

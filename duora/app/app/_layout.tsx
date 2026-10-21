@@ -43,6 +43,34 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Keeps the connection to the API alive.
+ *
+ * The Render free tier sleeps after 15 minutes, so the first request after
+ * that hits a waking instance. We ping it every few seconds while it is down
+ * and every 30 s once it is healthy, which keeps the connection pill honest.
+ */
+function ServerHeartbeat() {
+  const status = useStore((s) => s.server.status);
+  const autoReconnect = useStore((s) => s.server.autoReconnect);
+  const checkServer = useStore((s) => s.checkServer);
+
+  useEffect(() => {
+    if (!autoReconnect) return;
+    const interval = setInterval(
+      () => {
+        if (useStore.getState().server.status !== 'online') {
+          void useStore.getState().checkServer();
+        }
+      },
+      status === 'online' ? 30_000 : 8_000,
+    );
+    return () => clearInterval(interval);
+  }, [autoReconnect, status, checkServer]);
+
+  return null;
+}
+
 function ThemedRoot() {
   const themePreference = useStore((s) => s.themePreference);
   const accent = useStore((s) => s.accent);
@@ -80,6 +108,7 @@ function AppShell() {
 
   return (
     <ToastProvider>
+      <ServerHeartbeat />
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{

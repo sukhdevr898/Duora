@@ -13,10 +13,16 @@
       "image": "./assets/icons/splash-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#100D17",
-      "dark": { "backgroundColor": "#100D17" },
-      "light": { "backgroundColor": "#FBF8FF" }
+      "dark": {
+        "backgroundColor": "#100D17"
+      },
+      "light": {
+        "backgroundColor": "#FBF8FF"
+      }
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.duora.app",
       "versionCode": 1,
@@ -58,6 +64,7 @@
       "typedRoutes": true
     },
     "extra": {
+      "apiUrl": "https://duora.onrender.com",
       "eas": {
         "projectId": ""
       }

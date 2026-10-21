@@ -1,11 +1,12 @@
 # Duora architecture
 
-Duora is a monorepo with two deployables plus shared documentation:
+Duora is a small monorepo with two deployables plus shared documentation:
 
 ```
 duora/
 ├── app/      React Native + Expo (SDK 57) Android client, TypeScript, Expo Router
-├── server/   Node.js + TypeScript API and real-time service (Express, Socket.IO, Prisma)
+├── server/   Node.js + TypeScript API and real-time service (Express, Socket.IO)
+├── ui/       Premium React UI (Vite) — the design reference the app mirrors
 └── docs/     Architecture, API and operational documentation
 ```
 
@@ -16,19 +17,17 @@ duora/
 │  Duora Android app   │ ───────────────────────────────────────┐
 │  (Expo Router, RN)   │                                        │
 │                     │  REST /api/v1/*      Socket.IO           │
-│  SQLite local cache │ ───────────────────► ┌───────────────────▼──────────────┐
-│  SecureStore secrets│                      │ Node.js service (server/)        │
-│  react-native-webrtc│ ◄──── signaling ──── │ Express + Socket.IO              │
-└─────────────────────┘                      │ Prisma ─► PostgreSQL             │
-        │                                    │ Firebase Admin ─► FCM (optional)  │
-        │  STUN/TURN (media never transits   │ coturn REST creds (short-lived)   │
-        └──────────────► peer WebRTC ◄───────└───────────────────────────────────┘
-                 (direct media; TURN relay only when required)
+│  SecureStore secrets│ ───────────────────► ┌───────────────────▼──────────────┐
+│  design system      │                      │ Node.js service (server/)        │
+└─────────────────────┘                      │ Express + Socket.IO              │
+                                             │ node:sqlite  |  pg (Postgres)   │
+                                             │ media served from /img/…         │
+                                             └───────────────────────────────────┘
 ```
 
-**Media never flows through Node.js.** The server only exchanges SDP/ICE signaling
-and mints short-lived TURN credentials. Audio/video travels peer-to-peer via
-WebRTC, relayed through TURN only when NAT traversal demands it.
+The server is the single source of truth: every screen in the app renders data that
+came from the database through this API. Avatars and memory photos are served by the
+API itself (`/img/…`), so the client never depends on a third-party CDN.
 
 ## Client (`app/`)
 
@@ -36,45 +35,42 @@ WebRTC, relayed through TURN only when NAT traversal demands it.
 
 | Layer | Location | Responsibility |
 | --- | --- | --- |
-| Routes | `app/app/**` | Expo Router file-based routes, screens only |
-| Components | `app/src/components` | Reusable Duora design-system components |
-| Feature modules | `app/src/features/*` | API clients, socket logic, call/WebRTC coordinator, sync engine |
-| State | `app/src/state` | Zustand stores (auth, pairing, chat, call, network, settings) |
-| Persistence | `app/src/database`, `repositories` | SQLite (messages, outbox, drafts, memories), SecureStore (secrets) |
-| Services | `app/src/services` | HTTP client, authenticated socket, diagnostics, secure storage |
-| Theme | `app/src/theme` | Centralized tokens, light/dark ThemeProvider |
+| Routes | `app/app/**` | Expo Router file-based routes, screens stay thin |
+| Components | `app/src/components` | Duora design system (buttons, sheets, avatars, stickers, QR, brand) |
+| API | `app/src/api` | typed REST client (`client.ts`) + models (`types.ts`) |
+| State | `app/src/state/store.ts` | one store: session, home, chat, notes, calls, pairing, settings, server health |
+| Theme | `app/src/theme` | tokens, fonts, `ThemeProvider` (light/dark/system + 4 love accents + love mode) |
+| Data | `app/src/data` | settings section catalogue |
 
 ### Data flow — chat
 
-1. Outgoing messages are rendered optimistically with a client-generated UUID.
-2. The socket emits `message_send` with an acknowledgement; the server persists
-   to PostgreSQL **before** acknowledging, enforcing idempotency on
-   `(conversationId, clientMessageId)`.
-3. Acknowledged messages replace the optimistic row and are cached in SQLite.
-4. Offline sends land in the SQLite outbox and are retried with bounded
-   exponential backoff + jitter after reconnect, then de-duplicated by id.
-5. Reconnect reconciliation uses a timestamp watermark (`/sync?since=`) instead
-   of re-downloading the conversation. First page is 40 messages; older pages
-   load on demand via cursor pagination.
+1. The composer calls `api.sendMessage(conversationId, clientMessageId, text, sticker?)`.
+2. The server validates the payload (zod), persists it and broadcasts `message:new`
+   over Socket.IO — the optimistic bubble is replaced by the stored row.
+3. History is read with `GET /api/v1/chat/conversations/:id/messages?limit=80`;
+   receipts and reactions ride along with each message.
+4. Presence (`Active now`) comes from the Socket.IO presence events, never from a
+   local timer.
 
-### Data flow — calls
+### Data flow — pairing
 
-1. A durable `CallSession` row is created through REST (`POST /calls`).
-2. Signaling (`call_invite`, SDP offer/answer, ICE) traverses the authenticated
-   socket; every relay is authorized against the call's participants.
-3. `CallCoordinator` (`features/calling/CallCoordinator.ts`) is the single
-   source of truth for the `RTCPeerConnection`, tracks and call phase. Screens
-   render `useCallStore`; navigation never duplicates a session.
-4. The phase (`calling → ringing → connecting → connected → reconnecting/ended`)
-   only becomes `connected` when the WebRTC `connectionState` is `connected`.
-5. ICE restarts handle network changes; after 3 failed restarts the call fails.
+1. `POST /api/v1/pairing/invitation` creates a 6-character code (10-minute TTL) and
+   an opaque QR token; both are stored server-side.
+2. The partner enters the code (`POST /api/v1/pairing/accept`) or scans the QR
+   (`POST /api/v1/pairing/scan`); both are single use.
+3. On success the server links the two users, creates the conversation and emits
+   `pairing:matched` — both apps flip to the matched state.
 
-### Runtime classification
+### Connection handling
 
-`features/calling/runtime.ts` detects Expo Go (`ExecutionEnvironment.StoreClient`)
-and lazy-requires `react-native-webrtc` only outside Expo Go, so the same JS
-bundle runs in Expo Go for all supported features and shows an honest upgrade
-panel for calling. See [expo-go-limitations.md](./expo-go-limitations.md).
+- Every request carries a 30 s budget (`AbortController`); a Render instance that is
+  asleep answers with a loading page, which the client reports as *“the server is
+  waking up”* instead of crashing.
+- A background heartbeat pings `/api/v1/health` every 8 s while the server is down
+  and every 30 s when it is healthy — the `ConnectionPill` and the Server-health
+  screen always reflect reality.
+- A 401 triggers exactly one refresh + replay (single-flight); a transport failure
+  never clears the stored session.
 
 ## Server (`server/`)
 
@@ -82,44 +78,48 @@ panel for calling. See [expo-go-limitations.md](./expo-go-limitations.md).
 
 ```
 src/
-├── app.ts, server.ts        Express factory + bootstrap/graceful shutdown
-├── config/                  Validated environment (zod), structured logger
-├── middleware/              JWT auth, zod validation, errors, rate limiters
+├── index.ts, app.ts        bootstrap (migrate → seed → listen) + Express factory
+├── config/                 validated environment (zod), structured logger (pino)
+├── db/                     portable Db layer (node:sqlite | pg), schema + migrate
+├── middleware/             JWT auth, zod validation, error mapping
 ├── modules/
-│   ├── auth/                register/login/refresh/logout/reset, bcrypt + JWT
-│   ├── users/               profile, settings, soft account deletion
-│   ├── pairing/             invitations, verify/accept, unpair
-│   ├── chat/                messages, pagination, receipts, deletes, sync
-│   ├── calls/               call state machine, TURN credential minting
-│   ├── presence/            online + durable last-seen
-│   ├── push/                FCM via Firebase Admin (optional, fail-open)
-│   └── devices/             push token registration
-├── websocket/               Authenticated Socket.IO gateway + event handlers
-├── database/                Prisma client singleton
-├── services/                Shared domain logic (pairing/conversation authz)
-└── jobs/                    Stale invitation / missed-call / session cleanup
+│   ├── auth/               register/login/refresh/logout/me (bcrypt + JWT)
+│   ├── users/              profile, settings, public user shape
+│   ├── pairing/            invitations, accept by code / QR token, unlink
+│   ├── chat/               conversations, messages, receipts, reactions, quick replies
+│   ├── calls/              call log, start/end calls
+│   ├── notes/              memories (CRUD)
+│   ├── settings/           user settings (theme, accent, notifications…)
+│   ├── devices/            push token registration
+│   ├── health/             health payload (services, database, uptime)
+│   ├── home/               the home screen payload in one call
+│   └── app/                /api/v1/home route
+├── websocket/              authenticated Socket.IO gateway + event catalogue
+├── utils/                  ApiError, asyncHandler, ids, jwt helpers
+└── seed.ts                 demo couple, conversation, notes, pairing code
 ```
 
 ### Identity and sessions
 
-- Access JWTs are short-lived (default 15 minutes); refresh tokens are opaque,
-  stored only as SHA-256 hashes in `RefreshSession`, rotated on every refresh
-  and revocable on logout/account deletion.
-- Every protected HTTP request and the Socket.IO handshake derive the user
-  identity from the verified token — never from a request body.
+- Access JWTs carry the user id, email and display name; refresh tokens are
+  **single use** — every refresh rotates the token, revokes the old session row and
+  stores only its SHA-256 hash. Every token carries a random `jti`, so two sessions
+  created in the same second never collide.
+- Every protected HTTP request and the Socket.IO handshake derive the identity from
+  the verified token — never from a request body.
 
-### Why PostgreSQL (not in-memory maps)
+### Database portability
 
-Users, pairings, messages, receipts, call sessions, devices and settings are
-durable Prisma models with foreign keys, unique constraints and indexes.
-Socket connection registry is process-local by design (ephemeral transport
-state); multi-instance deployments swap in the Socket.IO Redis adapter without
-changing the domain model.
+`src/db/client.ts` exposes one tiny interface (`one`, `all`, `run`) implemented twice:
+`node:sqlite` for local development and `pg` for the managed Render database.
+Placeholders are translated (`?` → `$n`). The 16-table schema exists twice —
+`src/db/schema.sqlite.sql` and `src/db/schema.postgres.sql` — and is applied on
+boot by `src/db/migrate.ts`, so a deploy is always schema-correct.
 
-## Failure and honesty principles
+### Failure and honesty principles
 
-- "Online" for the partner comes from presence events, never from the local
-  socket being connected.
-- Update checks, push and pairing fetches fail open — they never block startup.
-- No feature claims E2EE: transport is HTTPS/WSS; at-rest database encryption
-  is an operator responsibility documented in [deployment.md](./deployment.md).
+- “Online” for the partner comes from presence events, never from a local timer.
+- Update checks, health pings and pairing fetches fail open — they never block the
+  UI.
+- No feature claims E2EE: transport is HTTPS/WSS; at-rest database encryption is an
+  operator responsibility documented in [deployment.md](./deployment.md).

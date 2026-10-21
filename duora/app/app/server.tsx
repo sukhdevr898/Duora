@@ -100,6 +100,7 @@ export default function ServerScreen() {
   const checkServer = useStore((s) => s.checkServer);
   const loadHealth = useStore((s) => s.loadHealth);
   const setAutoReconnect = useStore((s) => s.setAutoReconnect);
+  const simulateOutage = useStore((s) => s.simulateOutage);
 
   const [now, setNow] = useState(Date.now());
   const [checking, setChecking] = useState(false);
@@ -107,8 +108,11 @@ export default function ServerScreen() {
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     void loadHealth();
+    // The ping measures the real round-trip from this device — the server's
+    // own number is sub-millisecond on a local network and useless here.
+    void checkServer();
     return () => clearInterval(id);
-  }, [loadHealth]);
+  }, [loadHealth, checkServer]);
 
   const copy = STATUS_COPY[server.status];
   const latencyPct = server.status === 'online' ? Math.min(100, Math.max(12, 100 - server.latency / 2)) : 0;
@@ -232,7 +236,7 @@ export default function ServerScreen() {
                     void checkServer();
                     toast('Reconnecting…');
                   } else {
-                    setAutoReconnect(!server.autoReconnect);
+                    simulateOutage();
                     toast('Simulating an outage');
                   }
                 }}

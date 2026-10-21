@@ -1,240 +1,257 @@
-# Duora HTTP API
+# Duora REST API
 
-Base path: `/api/v1` (health endpoints are at the root).
+Base path: `/api/v1`. Health endpoints live at the root.
+Production base URL: **`https://duora.onrender.com`**.
 
-- All request/response bodies are JSON.
-- Authenticated endpoints require `Authorization: Bearer <accessToken>`.
-- Validation errors return `400` with a flattened Zod report in `error.details`.
-- Standard error envelope:
+Every protected route expects `Authorization: Bearer <accessToken>`.
+Errors are JSON: `{ "error": { "code": "…", "message": "…" } }` with a matching
+HTTP status (`400` validation, `401` unauthorized, `404` not found, `409` conflict,
+`500` internal).
 
-```json
-{ "error": { "code": "conflict", "message": "Human readable message", "details": {} } }
-```
-
-| Status | Codes |
-| --- | --- |
-| 400 | `bad_request` |
-| 401 | `unauthorized`, `session_expired` |
-| 403 | `forbidden` |
-| 404 | `not_found` |
-| 409 | `conflict` |
-| 429 | `rate_limited` |
-| 500 | `internal_error`, `database_error` |
+---
 
 ## Infrastructure
 
 ### `GET /health`
-Liveness. `200 { "status": "ok", "service": "duora-server", "time": "…" }`
-
-### `GET /ready`
-Readiness — runs `SELECT 1`. `200 { "status": "ready", "database": "up", "fcmConfigured": boolean }` or `503`.
-
-### `GET /api/v1/app/version?platform=android&version=1.0.0`
-In-app update contract. No client-side hardcoding of release URLs.
 
 ```json
-{
-  "platform": "android",
-  "latestVersion": "1.0.0",
-  "minSupportedVersion": "1.0.0",
-  "updateAvailable": false,
-  "updateRequired": false,
-  "releaseUrl": "https://play.google.com/store/apps/details?id=com.duora.app",
-  "checkedAt": "2026-10-19T18:00:00.000Z"
-}
+{"status":"operational","version":"2.0.0","region":"Singapore · ap-southeast",
+ "database":{"driver":"postgres","status":"operational"},"services":[…]}
 ```
 
-The client distinguishes **optional** (`updateAvailable`) and **required**
-(`updateRequired`, below `minSupportedVersion`) updates, never blocks on
-offline failure, and only opens the verified `releaseUrl`. It never downloads
-APKs directly.
+### `GET /api/v1/health`
+
+The same payload plus `startedAt`, `uptimeSeconds`, `latencyMs` and the per-service
+latency the app renders on the Server-health screen.
+
+---
 
 ## Authentication
 
-### `POST /auth/register` — rate limited (5/hour)
-```json
-{ "email": "alice@duora.dev", "password": "min-8-chars", "displayName": "Alice" }
-```
-`201` → `{ "user": { id, email, displayName, avatarUrl }, "tokens": { accessToken, refreshToken, expiresIn } }`
+### `POST /api/v1/auth/register` → `201`
 
-### `POST /auth/login` — rate limited (10/15 min)
 ```json
-{ "email": "alice@duora.dev", "password": "…", "device": { "pushToken": "ExponentPushToken[...]", "platform": "android", "deviceId": "…" } }
+{ "email": "you@duora.app", "password": "love1234", "displayName": "Sukhdev" }
 ```
-Same response shape as register. Wrong email and wrong password return the same
-generic `401` to prevent account enumeration.
 
-### `POST /auth/refresh`
+→ `{ "user": {…}, "accessToken": "…", "refreshToken": "…", "expiresIn": "30d" }`
+
+### `POST /api/v1/auth/login` → `200`
+
 ```json
-{ "refreshToken": "…" }
+{ "email": "sukhdev@duora.app", "password": "love1234" }
 ```
-Rotates the refresh session (the presented one is revoked) and returns
-`{ "tokens": { accessToken, refreshToken, expiresIn } }`.
 
-### `POST /auth/logout`
+→ the same envelope as `register`. A wrong password returns `401`.
+
+### `POST /api/v1/auth/refresh` → `200`
+
 ```json
 { "refreshToken": "…" }
 ```
-`204`. Revokes the refresh session. The client also deletes its local session.
 
-### `POST /auth/reset-password`
+→ a fresh envelope. **Refresh tokens are single use**: the old one is revoked and
+the new one must be stored. Using a revoked token returns `401`.
+
+### `POST /api/v1/auth/logout` → `204`
+
 ```json
-{ "email": "…" }
+{ "refreshToken": "…" }
 ```
-Always `202 { "accepted": true }` whether or not the account exists. Email
-delivery requires configuring an SMTP/email provider (see server README);
-without one the request is validated and logged, never faked.
 
-### `GET /auth/me`
-`200 { "user": { id, email, displayName, avatarUrl } }`
+### `GET /api/v1/auth/me` → `200` 🔒
 
-## Users and settings
+→ `{ "user": { id, email, displayName, avatarUrl, partnerNickname, createdAt } }`
 
-### `GET /users/me`
-Profile plus persisted settings row.
+---
 
-### `PATCH /users/me`
-Body: any of `displayName`, `avatarUrl` (https URL), `partnerNickname` (nullable).
+## Users & settings
 
-### `GET /users/me/settings` · `PUT /users/me/settings`
-Settings: `theme` (`system|light|dark`), `messageNotifications`,
-`callNotifications`, `ringtone`, `vibration`, `hidePreview`, `lowData`.
+### `GET /api/v1/users/me` → `200` 🔒 → `{ "user": {…} }`
+### `PATCH /api/v1/users/me` → `200` 🔒
 
-### `DELETE /users/me`
-Soft-deletes the account and revokes every refresh session (`204`).
+```json
+{ "displayName": "Sukhdev", "avatarUrl": "https://…", "partnerNickname": "Ruhi" }
+```
+
+### `GET /api/v1/settings` → `200` 🔒
+
+```json
+{ "settings": { "theme": "system", "accent": "violet", "loveMode": false,
+  "heartMotion": true, "glass": true, "messageNotifications": true,
+  "callNotifications": true, "ringtone": "default", "vibration": true,
+  "hidePreview": false, "lowData": false, "updatedAt": "…" } }
+```
+
+### `PATCH /api/v1/settings` → `200` 🔒
+
+Same fields, all optional — the app sends `theme`, `accent`, `loveMode`,
+`heartMotion` and `glass` whenever they change.
+
+---
 
 ## Pairing
 
-All pairing endpoints require authentication.
+### `GET /api/v1/pairing/status` → `200` 🔒
 
-### `GET /pairing/current`
-`{ "pairing": { "status": "UNPAIRED" } }` or
 ```json
-{
-  "pairing": {
-    "status": "ACTIVE",
-    "pairingId": "…",
-    "conversationId": "…",
-    "since": "…",
-    "partner": { "id": "…", "displayName": "…", "avatarUrl": null, "partnerNickname": null }
-  }
-}
+{ "phase": "matched", "code": "TH4XFS", "qrPayload": null, "expiresAt": null,
+  "matchedAt": "2026-10-21T10:04:04.255Z",
+  "partner": { "id": "usr_ruhi", "displayName": "Ruhi", "nickname": "Ruhi",
+               "avatarUrl": "https://…" },
+  "conversationId": "cv_…" }
 ```
 
-### `POST /pairing/invitations` — rate limited (12/min)
-Creates a short-lived invitation (TTL from `INVITATION_TTL_MINUTES`, default 10).
-Any previous pending invitation from the caller is revoked.
+`phase` is `idle` → `outgoing` (a code is waiting) → `matched`.
+
+### `POST /api/v1/pairing/invitation` → `201` 🔒
+
+→ `{ "code": "TH4XFS", "token": "…", "qrPayload": "duora://pair?token=…", "expiresAt": "…" }`
+
+The code lives for 10 minutes (`PAIRING_TTL_MINUTES`) and can be used once.
+
+### `POST /api/v1/pairing/accept` → `200` 🔒
+
 ```json
-{ "invitation": { "id", "code": "DUO-482913", "token": "<opaque>", "status": "PENDING", "expiresAt": "…", "createdBy": { "id", "displayName", "avatarUrl" } } }
+{ "code": "TH4XFS" }
 ```
-The QR code encodes `{ duora: 1, host, code, token, exp }`. It contains only
-the opaque server token — never a password or refresh token.
 
-### `GET /pairing/invitations/preview?code=DUO-482913` or `?token=…`
-Previews an invitation without pairing. Used after QR scan and manual entry.
+→ the new pairing status. `404` = unknown code, `409` = already paired.
 
-### `POST /pairing/verify` — rate limited (20/min)
+### `POST /api/v1/pairing/scan` → `200` 🔒
+
 ```json
-{ "code": "DUO-482913" }
+{ "token": "…" }
 ```
-Increments the invitation's attempt counter; after `INVITATION_MAX_ATTEMPTS`
-(default 5) the invitation is revoked and verification returns `403`.
 
-### `POST /pairing/accept`
+→ the new pairing status (QR path).
+
+### `POST /api/v1/pairing/resolve` → `200` 🔒
+
 ```json
-{ "code": "DUO-482913" }
+{ "data": "duora://pair?token=…" }
 ```
-or `{ "token": "…" }`. Server-authorized, transactional: creates the `Pairing`,
-`Conversation`, both participant rows, marks the invitation `USED`, revokes
-other pending invitations, and emits `pairing_update` to both users.
-`201 { "pairing": { "pairingId", "conversationId", "partnerId" } }`
 
-Rejected: own invitation, expired/used/revoked invitation (`409`), either side
-already paired (`409`).
+→ `{ "token": "…" }` — accepts a raw QR payload or a bare token.
 
-### `DELETE /pairing/current`
-Body `{ "confirm": "UNPAIR" }`. Marks the pairing `UNLINKED`, revokes pending
-invitations, emits `pairing_update` to both sides (`204`).
+### `DELETE /api/v1/pairing` → `200` 🔒
+
+Unlinks the pair. The conversation disappears from the chat list; memories stay.
+
+---
 
 ## Chat
 
-### `GET /conversations`
-`{ "conversations": [{ id, updatedAt, partner: {id, displayName, avatarUrl}, lastMessage: Message|null, unreadCount }] }`
+### `GET /api/v1/chat/conversations` → `200` 🔒
 
-### `POST /messages` — rate limited (60/min)
 ```json
-{ "conversationId": "…", "clientMessageId": "uuid-v4", "text": "hello", "type": "TEXT", "replyToId": "optional" }
+{ "conversations": [ { "id": "cv_…",
+  "partner": { "id": "usr_ruhi", "displayName": "Ruhi", "nickname": "Ruhi",
+               "avatarUrl": "https://…", "online": true, "lastSeenAt": "…" },
+  "lastMessage": { "text": "…", "sticker": null, "createdAt": "…", "from": "me" },
+  "unreadCount": 0, "updatedAt": "…" } ] }
 ```
-Idempotent on `(conversationId, clientMessageId)`: a retried send returns the
-original durable message. The message is persisted before the response.
-`201 { "message": Message }`.
 
-### `GET /conversations/:id/messages?cursor=<ISO>&limit=40`
-Cursor pagination (max 50). Returns newest-first internally, rendered
-oldest-first within the page.
+### `GET /api/v1/chat/conversations/:id/messages?limit=80` → `200` 🔒
+
+→ `{ "messages": [ { "id": "msg_…", "conversationId": "cv_…", "senderId": "…",
+  "text": "…", "sticker": null, "createdAt": "…", "reactions": [], "status": "read" } ] }`
+
+### `POST /api/v1/chat/conversations/:id/messages` → `201` 🔒
+
 ```json
-{ "messages": [Message], "nextCursor": "2026-10-19T…Z|null" }
+{ "clientMessageId": "uuid", "text": "Love you 💜", "sticker": null }
 ```
-"Delete for me" records are filtered; "delete for everyone" rows return with
-`deletedForAll: true` and empty text.
 
-### `GET /conversations/:id/sync?since=<ISO>`
-Reconnect reconciliation — messages and receipt changes after a watermark.
-`{ "messages": [Message], "receipts": [...] }`
+→ `{ "message": {…} }`. `clientMessageId` makes the send idempotent.
 
-### `POST /conversations/:id/delivered`
-Stamps un-stamped incoming receipts (`{ "delivered": n }`).
+### `POST /api/v1/chat/conversations/:id/read` → `200` 🔒 → `{ "marked": 3 }`
 
-### `POST /messages/read`
-`{ "conversationId": "…", "messageId"?: "…" }` — marks incoming messages read
-(and delivered). Emits `message_read` to the partner.
+### `POST /api/v1/chat/messages/:id/reactions` → `200` 🔒
 
-### `POST /messages/delete-for-me`
-`{ "messageId": "…" }` — hides the message for the caller only (`204`).
+```json
+{ "emoji": "heart" }
+```
 
-### `POST /messages/delete-for-all`
-`{ "messageId": "…" }` — sender only; blanks content and stamps
-`deletedForAllAt`. Returns `{ "id", "at" }` and fans out over the socket.
+→ `{ "reactions": ["heart"] }` (toggles).
+
+### `DELETE /api/v1/chat/messages/:id` → `204` 🔒
+
+### `GET /api/v1/chat/quick-replies` → `200` 🔒 → `{ "replies": ["Miss you ✨", …] }`
+
+### `GET /api/v1/chat/partner` → `200` 🔒
+
+→ `{ "conversationId": "cv_…", "partnerName": "Ruhi" }`
+
+---
 
 ## Calls
 
-### `POST /calls` — rate limited (20/min)
-`{ "callType": "AUDIO" | "VIDEO" }` →
+### `GET /api/v1/calls` → `200` 🔒 → `{ "calls": [ … ] }`
+### `POST /api/v1/calls` → `201` 🔒 — `{ "kind": "voice" | "video" }` → `{ "call": {…} }`
+### `POST /api/v1/calls/:callId/end` → `200` 🔒 → `{ "call": {…} }`
+
+---
+
+## Notes (memories)
+
+### `GET /api/v1/notes` → `200` 🔒 → `{ "notes": [ … ] }`
+### `POST /api/v1/notes` → `201` 🔒
+
 ```json
-{ "call": CallSession, "ice": { "iceServers": [...], "expiresAt": "…|null" }, "existing": false }
+{ "title": "Our first call", "body": "That moment…", "category": "PLAN",
+  "imageUrl": null, "mood": "heart-pink" }
 ```
-If a ringing/connecting/active call already involves the user, the existing
-session is returned (`existing: true`) instead of creating a duplicate.
 
-### `GET /calls/active`
-Current open call or `{ "call": null }` — used after Activity recreation.
+`category` is one of `ALL`, `PLAN`, `DAYS`.
 
-### `GET /calls/:callId/ice`
-Fresh short-lived TURN credentials (coturn REST HMAC scheme). The permanent
-`TURN_SECRET` never leaves the server.
+### `PATCH /api/v1/notes/:id` → `200` 🔒 → `{ "note": {…} }`
+### `DELETE /api/v1/notes/:id` → `204` 🔒
 
-### `POST /calls/:callId/accept` (callee) · `/decline` (callee) · `/cancel` (caller) · `/end` (either)
-Each validates participation and the legal state transition, persists the new
-`CallStatus`, and the corresponding socket event notifies the peer.
+---
 
-## Devices / push
+## Devices
 
-### `POST /devices/push-token`
+### `POST /api/v1/devices` → `201` 🔒
+
 ```json
-{ "pushToken": "ExponentPushToken[...]|FCM token", "platform": "android", "deviceId": "optional" }
+{ "pushToken": "ExponentPushToken[…]", "platform": "android", "deviceId": "…" }
 ```
-Tokens are globally unique (per app install); re-registering moves ownership to
-the current account.
 
-### `DELETE /devices/push-token`
-`{ "pushToken": "…" }` (`204`).
+→ `{ "deviceId": "dev_…" }`
 
-## Payload and abuse limits
+### `DELETE /api/v1/devices/:deviceId` → `204` 🔒
 
-- JSON body limit: 1 MB; Socket.IO signaling payload cap: 1 MB.
-- Message text: 1–4000 characters; invitation codes must match `DUO-\d{6}`.
-- Rate limiters: register, login, invitations, verification, message send,
-  call initiation, plus a 300 req/min global limiter.
-- Passwords hashed with bcrypt (cost 12); refresh tokens stored only as
-  SHA-256 hashes; secrets are read from environment variables and redacted in
-  logs.
+---
+
+## Home
+
+### `GET /api/v1/home` → `200` 🔒
+
+Everything the home screen needs in one call:
+
+```json
+{ "partner": { "id": "usr_ruhi", "displayName": "Ruhi", "nickname": "Ruhi",
+               "avatarUrl": "https://…", "online": true, "lastSeenAt": "…" },
+  "linked": true, "streakDays": 1, "daysTogether": 1,
+  "pairedAt": "2026-10-21T10:04:04.255Z",
+  "anniversary": { "title": "Our anniversary", "date": "14 Feb",
+                   "daysUntil": 116, "daysTogether": 1 },
+  "loveStats": { "daysTogether": "1", "messages": "12", "callsThisWeek": "1h 10m" },
+  "moments": [ … ], "latestMessage": { … } }
+```
+
+---
+
+## Media
+
+Avatars and memory photos are served straight from the API:
+
+```
+GET /img/me.jpg
+GET /img/partner.jpg
+GET /img/note-1.jpg … /img/note-4.jpg
+```
+
+The URLs are absolute (`PUBLIC_BASE_URL` + path), so the client never has to guess
+the host.

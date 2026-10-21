@@ -2,49 +2,42 @@
 
 > Two hearts. One private space.
 
-A premium, private two-person communication app: pairing by code/QR,
-persistent real-time chat, and genuine WebRTC audio/video calling.
+The premium, private two-person communication app — a 1:1 port of the React UI in
+[`../ui`](../ui) (same layout, typography, icons, themes and motion) talking to the
+Duora Node API. Every screen is filled with real database data; there are no mock
+records anywhere.
 
 ## Stack
 
 - Expo SDK 57 · React Native 0.86 · React 19 · TypeScript (strict)
-- Expo Router (file-based, typed routes)
-- Zustand state · expo-sqlite local cache/outbox · expo-secure-store secrets
-- Socket.IO client · react-native-webrtc (development builds)
-- expo-camera (QR scan) · expo-notifications (FCM) · react-native-qrcode-svg
+- Expo Router (file-based routes)
+- REST + Socket.IO against the Duora API (`/api/v1/*`)
+- `expo-secure-store` for the refresh token, `expo-camera` for QR pairing,
+  `react-native-svg` for the hand-drawn hearts, stickers and QR code
+- `lucide-react-native` icons, Google Fonts (Plus Jakarta Sans + Great Vibes)
 
-## Quick start (Expo Go — supported features)
+## Quick start
 
 ```bash
 cd app
-cp .env.example .env          # defaults target the Android emulator host
 npm install
 npx expo start                 # open in Expo Go on Android
 ```
 
-Start the backend first (see `../server/README.md`). On a physical device,
-replace `10.0.2.2` with your computer's LAN IP or a deployed HTTPS URL in
-`.env`, then restart the bundler.
+The app is pre-configured for the live deployment at **https://duora.onrender.com**.
+To point it somewhere else (a laptop on your LAN, a staging server) set
+`EXPO_PUBLIC_API_URL` in `.env` — see [`.env.example`](./.env.example) — and restart
+the bundler.
 
-Everything except native calling runs in Expo Go: theming, onboarding, auth,
-pairing (code + QR), full chat with offline queue, settings, diagnostics.
-Opening a call in Expo Go shows an honest development-build notice — there is
-no simulated video.
-
-## Development build (native calling, foreground service, PiP)
+Start the backend first if you run against a local server
+(see [`../server/README.md`](../server/README.md)):
 
 ```bash
-# Cloud build
-npx eas build --profile development --platform android
-# or locally
-npx expo prebuild --platform android
-npx expo run:android --variant debug
-npx expo start --dev-client
+cd ../server && npm install && npm run seed && npm run dev
 ```
 
-Full instructions, permissions, FCM and TURN setup:
-[`../docs/android-build.md`](../docs/android-build.md) and
-[`../docs/expo-go-limitations.md`](../docs/expo-go-limitations.md).
+Sign in with the seeded account **sukhdev@duora.app / love1234**
+(partner: **ruhi@duora.app / love1234**).
 
 ## Scripts
 
@@ -55,6 +48,7 @@ Full instructions, permissions, FCM and TURN setup:
 | `npm run dev-client` | Start for a custom development build |
 | `npm run prebuild` | Generate the native `android/` project |
 | `npm run typecheck` | Strict TypeScript check |
+| `npm run export:web` | Static web build (used for visual QA) |
 | `npm run doctor` | Verify dependency alignment with the Expo SDK |
 | `npm run eas:dev` | EAS development APK |
 
@@ -63,22 +57,25 @@ Full instructions, permissions, FCM and TURN setup:
 ```
 app/
 ├── app/                 Expo Router routes (screens stay thin)
+│   ├── (tabs)/          index · chat · notes · calls · settings
+│   ├── appearance.tsx   theme + accent + love mode
+│   ├── server.tsx       live server health
+│   ├── pairing/         6-character code, QR show, QR scan
+│   ├── conversation/    chat thread with stickers & reactions
+│   ├── call/            audio + video call screens
+│   └── settings/        sub-sections (account, chat, privacy, …)
 ├── src/
-│   ├── components/      Duora design system
-│   ├── features/        auth, pairing, chat, calling, notifications…
-│   ├── state/           Zustand stores
-│   ├── database/        SQLite migrations
-│   ├── repositories/    SQLite-backed cache, outbox, memories
-│   ├── services/        HTTP client, socket, secure storage, diagnostics
-│   ├── theme/           tokens + ThemeProvider
-│   ├── hooks/           bootstrap, update check, app-state, call timer
-│   └── types/           shared model types + WebRTC shim
-├── plugins/             withDuoraAndroid (PiP + foreground service)
-└── assets/              Brand icons, fonts, sounds, images
+│   ├── api/             typed REST client (client.ts) + models (types.ts)
+│   ├── state/           single store: session, chat, notes, calls, pairing
+│   ├── components/      Duora design system (buttons, sheets, avatars, …)
+│   ├── theme/           tokens, fonts, ThemeProvider
+│   └── data/            settings section catalogue
+├── assets/              brand icons, fonts, sounds
+└── app.json             Expo config (extra.apiUrl = production API)
 ```
 
 ## Configuration
 
 All public runtime config uses `EXPO_PUBLIC_*` variables (see
-`.env.example`): API base URL, WebSocket URL, environment label, optional
-version endpoint and EAS project id. No secrets belong in the app bundle.
+[`.env.example`](./.env.example)). Only the API base URL is needed — the WebSocket
+endpoint is derived from it. No secrets belong in the app bundle.
