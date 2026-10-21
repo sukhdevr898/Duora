@@ -1,167 +1,166 @@
-import { useEffect, useRef, useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Screen } from '../../src/components/Screen';
-import { DuoraTopBar } from '../../src/components/DuoraTopBar';
-import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
-import { LoadingState } from '../../src/components/LoadingState';
+import Animated, { useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
+import { ArrowLeft, Flashlight, FlashlightOff, ScanLine, Sparkles } from 'lucide-react-native';
+import { PressableScale } from '../../src/components/ui';
+import { useToast } from '../../src/components/Overlay';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
-import { spacing, radii } from '../../src/theme/tokens';
-import { acceptInvitation, getCurrentPairing, previewInvitation } from '../../src/features/pairing/pairing.api';
-import { usePairingStore } from '../../src/state/pairing.store';
-import { ApiClientError } from '../../src/types/api';
-import type { Invitation } from '../../src/types/models';
+import { ABSOLUTE_FILL } from '../../src/theme/tokens';
+import { useStore } from '../../src/state/store';
 
-type ScanError = 'invalid' | 'expired' | 'used' | 'network' | 'duplicate' | null;
-
-export default function ScanScreen() {
+export default function ScannerScreen() {
   const router = useRouter();
-  const { colors, typography } = useDuoraTheme();
+  const insets = useSafeAreaInsets();
+  const { t } = useDuoraTheme();
+  const { toast } = useToast();
+  const acceptToken = useStore((s) => s.acceptToken);
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [preview, setPreview] = useState<Invitation | null>(null);
-  const [error, setError] = useState<ScanError>(null);
-  const [accepting, setAccepting] = useState(false);
-  const lockRef = useRef(false);
-  const setPairing = usePairingStore((s) => s.setPairing);
+  const [torch, setTorch] = useState(false);
+  const [scanned, setScanned] = useState(false);
 
-  useEffect(() => {
-    if (!permission?.granted) void requestPermission();
-  }, [permission, requestPermission]);
+  const laserStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: withRepeat(withTiming(240, { duration: 2200 }), -1, false) }],
+  }));
 
-  const parseQr = (raw: string): { token?: string; code?: string } | null => {
-    try {
-      const data = JSON.parse(raw) as { duora?: number; token?: string; code?: string };
-      if (data.duora === 1 && (data.token || data.code)) {
-        return { token: data.token, code: data.code };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const onScanned = async ({ data }: { data: string }) => {
-    if (lockRef.current) return;
-    const parsed = parseQr(data);
-    if (!parsed) {
-      setError('invalid');
-      return;
-    }
-    lockRef.current = true;
-    try {
-      const { invitation } = await previewInvitation(parsed);
-      setPreview(invitation);
-      setError(null);
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        if (err.status === 409) setError('expired');
-        else if (err.code === 'not_found') setError('used');
-        else setError('network');
-      } else {
-        setError('network');
-      }
-    } finally {
-      // Release after the user dismisses the outcome, preventing duplicate scans.
-      setTimeout(() => {
-        lockRef.current = false;
-      }, 1500);
-    }
-  };
-
-  const confirmPair = async () => {
-    if (!preview) return;
-    setAccepting(true);
-    try {
-      await acceptInvitation({ token: preview.token });
-      const { pairing } = await getCurrentPairing();
-      setPairing(pairing);
-      router.replace('/(tabs)/home');
-    } catch (err) {
-      setError(err instanceof ApiClientError ? 'used' : 'network');
-      setPreview(null);
-    } finally {
-      setAccepting(false);
+  const onBarcode = async ({ data }: { data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+    const token = data.includes('token=')
+      ? new URL(data.replace('duora://', 'https://')).searchParams.get('token') ?? ''
+      : data;
+    const ok = await acceptToken(token);
+    if (ok) {
+      toast('Paired 💜');
+      setTimeout(() => router.replace('/pairing'), 700);
+    } else {
+      toast('That QR code did not work');
+      setScanned(false);
     }
   };
 
   if (!permission) {
-    return (
-      <Screen>
-        <DuoraTopBar showBack title="Scan QR" />
-        <LoadingState message="Checking camera permission…" />
-      </Screen>
-    );
+    return <View style={[styles.root, { backgroundColor: '#000' }]} />;
   }
 
   if (!permission.granted) {
     return (
-      <Screen>
-        <DuoraTopBar showBack title="Scan QR" />
-        <View style={styles.permission}>
-          <Text style={[typography.heading, { color: colors.text }]}>Camera permission needed</Text>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center' }]}>
-            Duora needs the camera to scan your partner’s pairing QR code.
-          </Text>
-          <View style={{ marginTop: spacing.xl, alignSelf: 'stretch' }}>
-            <PrimaryButton label="Open system settings" icon="settings" onPress={() => void Linking.openSettings()} />
+      <View style={[styles.root, { backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center', padding: 30 }]}>
+        <Text style={[styles.permissionTitle, { color: t.text }]}>Camera access needed</Text>
+        <Text style={[styles.permissionSub, { color: t.text2 }]}>
+          Duora uses the camera only to scan your partner&apos;s pairing QR code.
+        </Text>
+        <PressableScale onPress={() => void requestPermission()} accessibilityLabel="Allow camera">
+          <View style={[styles.permissionBtn, { backgroundColor: t.primary }]}>
+            <Text style={styles.permissionBtnText}>Allow camera</Text>
           </View>
-        </View>
-      </Screen>
+        </PressableScale>
+        <PressableScale onPress={() => router.back()} accessibilityLabel="Go back">
+          <Text style={[styles.backText, { color: t.text3 }]}>Not now</Text>
+        </PressableScale>
+      </View>
     );
   }
 
   return (
-    <Screen showOfflineBanner={false}>
-      <DuoraTopBar showBack title="Scan partner’s QR" />
-      <View style={[styles.camera, { borderRadius: radii.xl, overflow: 'hidden', backgroundColor: colors.surface }]}>
-        <CameraView
-          style={StyleSheet.absoluteFill}
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={(result) => void onScanned(result)}
-        />
-        <View style={[styles.frame, { borderColor: colors.primary }]} pointerEvents="none" />
-      </View>
-      {error ? (
-        <Text style={[typography.body, { color: colors.error, marginTop: spacing.lg, textAlign: 'center' }]}>
-          {error === 'invalid' && 'That QR code isn’t a Duora invitation.'}
-          {error === 'expired' && 'This invitation has expired — ask for a new one.'}
-          {error === 'used' && 'This invitation was already used or revoked.'}
-          {error === 'network' && 'Network problem — check your connection and try again.'}
-          {error === 'duplicate' && 'That invitation has already been scanned.'}
-        </Text>
-      ) : (
-        <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.lg, textAlign: 'center' }]}
-        >
-          Point the camera at the QR code on your partner’s screen. Nothing is paired until you confirm.
-        </Text>
-      )}
-
-      <ConfirmationDialog
-        visible={Boolean(preview)}
-        title="Pair with this person?"
-        message={preview ? `${preview.createdBy.displayName} invited you. Pairing connects your private Duora space.` : ''}
-        confirmLabel="Pair now"
-        loading={accepting}
-        onConfirm={() => void confirmPair()}
-        onCancel={() => setPreview(null)}
+    <View style={styles.root}>
+      <CameraView
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        enableTorch={torch}
+        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        onBarcodeScanned={scanned ? undefined : onBarcode}
       />
-    </Screen>
+
+      <View style={styles.overlay}>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <PressableScale onPress={() => router.back()} accessibilityLabel="Back">
+            <ArrowLeft size={20} strokeWidth={2.4} color="#fff" />
+          </PressableScale>
+          <Text style={styles.headerTitle}>Scan partner&apos;s QR</Text>
+          <PressableScale
+            onPress={() => setTorch((v) => !v)}
+            accessibilityLabel={torch ? 'Turn torch off' : 'Turn torch on'}
+          >
+            {torch ? (
+              <FlashlightOff size={20} strokeWidth={2.4} color="#fff" />
+            ) : (
+              <Flashlight size={20} strokeWidth={2.4} color="#fff" />
+            )}
+          </PressableScale>
+        </View>
+
+        <View style={styles.frameWrap}>
+          <View style={styles.frame}>
+            <View style={[styles.corner, styles.tl]} />
+            <View style={[styles.corner, styles.tr]} />
+            <View style={[styles.corner, styles.bl]} />
+            <View style={[styles.corner, styles.br]} />
+            <Animated.View style={[styles.laser, laserStyle]} />
+          </View>
+          <Text style={styles.hint}>
+            <ScanLine size={14} strokeWidth={2.4} color="#fff" /> Point at your partner&apos;s pairing code
+          </Text>
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 28 }]}>
+          <Sparkles size={13} strokeWidth={2.4} color="#E9DEFF" />
+          <Text style={styles.footerText}>
+            The QR contains a one-time token — it never contains a password.
+          </Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  camera: { flex: 1, marginTop: spacing.md, minHeight: 320 },
-  frame: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '22%',
-    width: 220,
-    height: 220,
-    borderWidth: 3,
-    borderRadius: 24,
+  root: { flex: 1, backgroundColor: '#000' },
+  overlay: { ...ABSOLUTE_FILL, justifyContent: 'space-between' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(8,5,14,0.45)',
   },
-  permission: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  headerTitle: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  frameWrap: { alignItems: 'center', gap: 22 },
+  frame: { width: 250, height: 250, borderRadius: 28 },
+  corner: { position: 'absolute', width: 44, height: 44, borderColor: '#E9DEFF' },
+  tl: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 24 },
+  tr: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 24 },
+  bl: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 24 },
+  br: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 24 },
+  laser: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#B79BFF',
+    shadowColor: '#B79BFF',
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+  },
+  hint: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 30,
+    paddingTop: 18,
+    backgroundColor: 'rgba(8,5,14,0.45)',
+  },
+  footerText: { color: '#E9DEFF', fontSize: 11.5, fontWeight: '600', textAlign: 'center' },
+  permissionTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4, marginBottom: 8 },
+  permissionSub: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 20 },
+  permissionBtn: { paddingHorizontal: 26, height: 50, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  permissionBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  backText: { fontSize: 13, fontWeight: '600', marginTop: 16 },
 });

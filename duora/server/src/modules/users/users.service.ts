@@ -1,69 +1,80 @@
-import { prisma } from '../../database/prisma';
-import { ApiError } from '../../utils/ApiError';
+import { db } from '../../db/client';
+import { nowIso } from '../../utils/ids';
 
-export async function getProfile(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      displayName: true,
-      avatarUrl: true,
-      partnerNickname: true,
-      deletedAt: true,
-      createdAt: true,
-      settings: true,
-    },
-  });
-  if (!user || user.deletedAt) throw ApiError.notFound('Account not found');
-  return user;
+export type UserRow = {
+  id: string;
+  email: string;
+  password_hash: string;
+  display_name: string;
+  avatar_url: string | null;
+  partner_nickname: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublicUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl: string | null;
+  partnerNickname: string | null;
+  createdAt: string;
+};
+
+export function toPublicUser(row: UserRow): PublicUser {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    partnerNickname: row.partner_nickname,
+    createdAt: row.created_at,
+  };
+}
+
+export async function findById(userId: string): Promise<UserRow | null> {
+  return db().one<UserRow>('SELECT * FROM users WHERE id = ?', [userId]);
+}
+
+export async function findByEmail(email: string): Promise<UserRow | null> {
+  return db().one<UserRow>('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
 }
 
 export async function updateProfile(
   userId: string,
-  data: { displayName?: string; avatarUrl?: string; partnerNickname?: string | null },
-) {
-  return prisma.user.update({
-    where: { id: userId },
-    data,
-    select: { id: true, email: true, displayName: true, avatarUrl: true, partnerNickname: true },
-  });
+  patch: { displayName?: string; avatarUrl?: string | null; partnerNickname?: string | null },
+): Promise<PublicUser | null> {
+  const fields: string[] = [];
+  const params: unknown[] = [];
+  if (patch.displayName !== undefined) {
+    fields.push('display_name = ?');
+    params.push(patch.displayName);
+  }
+  if (patch.avatarUrl !== undefined) {
+    fields.push('avatar_url = ?');
+    params.push(patch.avatarUrl);
+  }
+  if (patch.partnerNickname !== undefined) {
+    fields.push('partner_nickname = ?');
+    params.push(patch.partnerNickname);
+  }
+  if (fields.length === 0) {
+    const existing = await findById(userId);
+    return existing ? toPublicUser(existing) : null;
+  }
+  fields.push('updated_at = ?');
+  params.push(nowIso(), userId);
+  await db().run(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, params);
+  const updated = await findById(userId);
+  return updated ? toPublicUser(updated) : null;
 }
 
-export async function getSettings(userId: string) {
-  const settings = await prisma.userSettings.upsert({
-    where: { userId },
-    create: { userId },
-    update: {},
-  });
-  return settings;
-}
-
-export interface SettingsUpdate {
-  theme?: 'system' | 'light' | 'dark';
-  messageNotifications?: boolean;
-  callNotifications?: boolean;
-  ringtone?: string;
-  vibration?: boolean;
-  hidePreview?: boolean;
-  lowData?: boolean;
-}
-
-export async function updateSettings(userId: string, data: SettingsUpdate) {
-  return prisma.userSettings.upsert({
-    where: { userId },
-    create: { userId, ...data },
-    update: data,
-  });
-}
-
-/**
- * Account deletion: soft-delete the user and revoke every refresh session.
- * A retention job can hard-delete after the retention window.
- */
-export async function deleteAccount(userId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { deletedAt: new Date() } }),
-    prisma.refreshSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
-  ]);
+/** Ensures a settings row exists so clients always get a full object. */
+export async function ensureSettings(userId: string): Promise<void> {
+  const existing = await db().one('SELECT user_id FROM user_settings WHERE user_id = ?', [userId]);
+  if (existing) return;
+  await db().run(
+    `INSERT INTO user_settings (user_id, updated_at) VALUES (?, ?)`,
+    [userId, nowIso()],
+  );
 }

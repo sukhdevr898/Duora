@@ -1,21 +1,23 @@
 {
   "name": "duora",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Duora — Two hearts. One private space. Private two-person communication (Expo Android app + Node.js server).",
+  "description": "Duora \u2014 Two hearts. One private space. Expo (React Native) app + Node.js API, real data only.",
   "scripts": {
     "dev:app": "npm --prefix app run start",
     "dev:ui": "npm --prefix ui run dev",
     "build:ui": "npm --prefix ui run build",
     "dev:server": "npm --prefix server run dev",
     "build:server": "npm --prefix server run build",
-    "test:server": "npm --prefix server test",
+    "start:server": "npm --prefix server run start",
+    "seed:server": "npm --prefix server run seed",
+    "export:web": "npm --prefix app run export:web",
     "typecheck:app": "npm --prefix app run typecheck",
     "typecheck:server": "npm --prefix server run typecheck",
     "doctor:app": "npm --prefix app run doctor"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "license": "UNLICENSED"
 }

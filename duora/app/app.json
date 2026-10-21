@@ -52,22 +52,7 @@
           "recordAudioAndroid": true
         }
       ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icons/notification-icon.png",
-          "color": "#B69CFF",
-          "sounds": []
-        }
-      ],
-      [
-        "@config-plugins/react-native-webrtc",
-        {
-          "cameraPermission": "Duora uses the camera for video calls with your partner.",
-          "microphonePermission": "Duora uses the microphone for calls."
-        }
-      ],
-      "./plugins/withDuoraAndroid"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

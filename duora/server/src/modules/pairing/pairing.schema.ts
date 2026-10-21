@@ -1,21 +1,19 @@
 import { z } from 'zod';
 
-export const createInvitationSchema = z.object({}).strict();
-
-export const verifyCodeSchema = z.object({
+export const acceptByCodeSchema = z.object({
   code: z
     .string()
     .trim()
-    .regex(/^DUO-\d{6}$/, 'Enter the full code, e.g. DUO-482913'),
+    .min(6, 'The pairing code has 6 characters')
+    .max(6, 'The pairing code has 6 characters')
+    .regex(/^[A-Za-z0-9]+$/, 'The pairing code only uses letters and numbers')
+    .transform((s) => s.toUpperCase()),
 });
 
-export const acceptInvitationSchema = z
-  .object({
-    code: z.string().trim().regex(/^DUO-\d{6}$/).optional(),
-    token: z.string().min(20).max(512).optional(),
-  })
-  .refine((v) => Boolean(v.code || v.token), { message: 'Provide a code or invitation token' });
+export const acceptByTokenSchema = z.object({
+  token: z.string().min(8),
+});
 
-export const unpairSchema = z.object({
-  confirm: z.literal('UNPAIR'),
+export const scanSchema = z.object({
+  data: z.string().min(8),
 });

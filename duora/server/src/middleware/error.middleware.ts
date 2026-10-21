@@ -1,37 +1,40 @@
 import type { NextFunction, Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
-import { ApiError } from '../utils/ApiError';
+import { ZodError } from 'zod';
 import { logger } from '../config/logger';
+import { ApiError } from '../utils/ApiError';
 
-function mapPrismaError(err: Prisma.PrismaClientKnownRequestError): ApiError {
-  switch (err.code) {
-    case 'P2002':
-      return ApiError.conflict('A record with this value already exists', err.meta);
-    case 'P2025':
-      return ApiError.notFound('Referenced record does not exist');
-    default:
-      return new ApiError(500, 'database_error', `Database error (${err.code})`);
+export function notFoundHandler(req: Request, res: Response): void {
+  res.status(404).json({
+    error: { code: 'not_found', message: `No route for ${req.method} ${req.path}` },
+  });
+}
+
+export function errorHandler(
+  err: unknown,
+  _req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
+  if (err instanceof ZodError) {
+    res.status(400).json({
+      error: {
+        code: 'validation_error',
+        message: 'Request payload failed validation',
+        details: err.flatten(),
+      },
+    });
+    return;
   }
-}
 
-export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
-  next(ApiError.notFound(`Route not found: ${req.method} ${req.path}`));
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof ApiError) {
-    res.status(err.statusCode).json({
+    if (err.status >= 500) logger.error({ err: err.message, code: err.code }, 'api error');
+    res.status(err.status).json({
       error: { code: err.code, message: err.message, details: err.details },
     });
     return;
   }
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    const mapped = mapPrismaError(err);
-    res.status(mapped.statusCode).json({ error: { code: mapped.code, message: mapped.message } });
-    return;
-  }
 
-  logger.error({ err, path: req.path }, 'Unhandled error');
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  logger.error({ err: message, stack: err instanceof Error ? err.stack : undefined }, 'unhandled error');
   res.status(500).json({ error: { code: 'internal_error', message: 'Something went wrong' } });
 }

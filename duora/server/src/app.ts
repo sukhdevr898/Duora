@@ -1,62 +1,88 @@
-import express, { type Express } from 'express';
+import express from 'express';
+import path from 'node:path';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import pinoHttp from 'pino-http';
 import { env } from './config/env';
 import { logger } from './config/logger';
-import { globalLimiter } from './middleware/rateLimit.middleware';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
-import { healthRouter, appRouter } from './modules/app/app.routes';
-import authRoutes from './modules/auth/auth.routes';
-import usersRoutes from './modules/users/users.routes';
-import pairingRoutes from './modules/pairing/pairing.routes';
-import chatRoutes from './modules/chat/chat.routes';
-import callsRoutes from './modules/calls/calls.routes';
-import devicesRoutes from './modules/devices/devices.routes';
+import { authRouter } from './modules/auth/auth.routes';
+import { appRouter } from './modules/app/app.routes';
+import { callsRouter } from './modules/calls/calls.routes';
+import { chatRouter } from './modules/chat/chat.routes';
+import { devicesRouter } from './modules/devices/devices.routes';
+import { notesRouter } from './modules/notes/notes.routes';
+import { pairingRouter } from './modules/pairing/pairing.routes';
+import { settingsRouter } from './modules/settings/settings.routes';
+import { usersRouter } from './modules/users/users.routes';
+import { healthPayload } from './modules/health/health.service';
 
-export function createApp(): Express {
+export function createApp(): express.Express {
   const app = express();
-  app.set('trust proxy', 1);
 
-  app.use(helmet());
+  app.set('trust proxy', 1);
+  app.use(
+    helmet({
+      // The mobile client talks to this API over plain HTTP in development.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(
     cors({
-      origin: (origin, callback) => {
-        // Allow non-browser clients (no origin) and configured origins.
-        if (!origin || env.corsOrigins.length === 0 || env.corsOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        callback(new Error('Not allowed by CORS'));
-      },
+      origin: env.corsOrigins.length ? env.corsOrigins : true,
       credentials: true,
     }),
   );
+  app.use(compression());
   app.use(express.json({ limit: '1mb' }));
-  // Lightweight logging: skip /health + /ready, reduce verbosity on Render free tier.
-  // Logs are still structured (pino) but health noise doesn't wake up log drains.
   app.use(
     pinoHttp({
       logger,
-      autoLogging: { ignore: (req) => req.url === '/health' || req.url === '/ready' },
-      quietReqLogger: env.isProd,
+      autoLogging: { ignore: (req) => req.url === '/health' },
     }),
   );
-  app.use(globalLimiter);
 
-  app.use(healthRouter);
+  /* ---------------- health ---------------- */
+  app.get('/health', async (_req, res) => {
+    const payload = await healthPayload();
+    res.status(payload.status === 'down' ? 503 : 200).json({
+      status: payload.status,
+      uptimeSeconds: payload.uptimeSeconds,
+      version: payload.version,
+      latencyMs: payload.latencyMs,
+      services: payload.services,
+    });
+  });
 
-  const api = express.Router();
-  api.use('/auth', authRoutes);
-  api.use('/users', usersRoutes);
-  api.use('/pairing', pairingRoutes);
-  api.use('/', chatRoutes);
-  api.use('/', callsRoutes);
-  api.use('/devices', devicesRoutes);
-  api.use('/', appRouter);
-  app.use('/api/v1', api);
+  app.get('/api/v1/health', async (_req, res) => {
+    res.json(await healthPayload());
+  });
+
+  /* ---------------- static media ---------------- */
+  // Avatars and memory photos are served by the API so the mobile client
+  // never depends on a third-party CDN.
+  app.use(
+    '/img',
+    express.static(path.join(process.cwd(), 'public', 'img'), {
+      maxAge: '7d',
+      fallthrough: true,
+    }),
+  );
+
+  /* ---------------- api ---------------- */
+  app.use('/api/v1/auth', authRouter);
+  app.use('/api/v1/users', usersRouter);
+  app.use('/api/v1/pairing', pairingRouter);
+  app.use('/api/v1/chat', chatRouter);
+  app.use('/api/v1/calls', callsRouter);
+  app.use('/api/v1/notes', notesRouter);
+  app.use('/api/v1/settings', settingsRouter);
+  app.use('/api/v1/devices', devicesRouter);
+  app.use('/api/v1', appRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
+
   return app;
 }
