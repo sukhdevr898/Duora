@@ -38,8 +38,19 @@ services:
       - key: PORT
         value: 10000
       # ↓↓↓  The only value you paste in. Supabase → Settings → Database.
+      #      Use the POOLED host (…pooler.supabase.com) — Render has no IPv6.
       - key: DATABASE_URL
         sync: false
+      # Supabase Auth (optional): sign-in fallback + access-token verification.
+      - key: SUPABASE_URL
+        value: https://jfttevfwqonxasoahiby.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_Bzsts1IXPpMZI0XphKTZqg_EKLyDznT
+      # Server-only secret — paste the "sb_secret_…" key from Supabase.
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        value: https://jfttevfwqonxasoahiby.supabase.co/auth/v1/.well-known/jwks.json
       # Render generates the two signing secrets for you.
       - key: JWT_ACCESS_SECRET
         generateValue: true

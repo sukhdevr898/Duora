@@ -29,10 +29,11 @@ src/
 ## 1. Set up the database (Supabase) — 2 minutes
 
 Your Supabase project is **sukhdevr898's Project**
-(ref `prgumgksuhinnyjlyzli`, region `ap-south-1`).
+(ref `jfttevfwqonxasoahiby`, region `ap-south-1`) — it is active and the
+schema is already applied.
 
 1. Open [supabase.com/dashboard](https://supabase.com/dashboard) and pick the
-   project. If it shows **Paused / Restore project**, restore it first —
+   project. If it ever shows **Paused / Restore project**, restore it first —
    Render cannot reach a paused database.
 2. Go to **Project Settings → Database**.
 3. If you have never seen the password, click **Reset database password** and
@@ -41,7 +42,7 @@ Your Supabase project is **sukhdevr898's Project**
    (port `5432`). It looks like:
 
    ```
-   postgresql://postgres.prgumgksuhinnyjlyzli:YOUR_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+   postgresql://postgres.jfttevfwqonxasoahiby:YOUR_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
    ```
 
    > Use the **pooler** host. The plain `db.<ref>.supabase.co` host is IPv6-only
@@ -49,6 +50,37 @@ Your Supabase project is **sukhdevr898's Project**
    > works.
 
 That one string is the only thing you need from Supabase.
+
+**Your exact connection string** (use the *pooled* host — Render has no IPv6):
+
+```
+postgresql://postgres.jfttevfwqonxasoahiby:<PASSWORD>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+The schema is **already applied** in this project and the demo couple is
+already seeded, so the first boot only has to connect.
+
+### 1b. Supabase Auth (optional)
+
+The API can also use Supabase Auth as the identity provider:
+
+| Variable | Value |
+| --- | --- |
+| `SUPABASE_URL` | `https://jfttevfwqonxasoahiby.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (public, safe in the app too) |
+| `SUPABASE_SECRET_KEY` | `sb_secret_…` — **server only**, paste it into Render |
+| `SUPABASE_JWKS_URL` | `https://jfttevfwqonxasoahiby.supabase.co/auth/v1/.well-known/jwks.json` |
+
+With these set:
+
+- `POST /api/v1/auth/login` falls back to Supabase Auth when the local password
+  does not match — the account is created locally on the fly.
+- **Every** protected route also accepts a Supabase access token, verified with
+  the project's JWKS (RS256, issuer `…/auth/v1`, audience `authenticated`).
+- `POST /api/v1/auth/register` mirrors the new account into Supabase Auth
+  (needs the secret key).
+
+Without them the server behaves exactly as before — its own email + password.
 
 ---
 
@@ -97,7 +129,7 @@ npm run dev               # http://127.0.0.1:4000
 To use the real Supabase database locally, put the connection string in `.env`:
 
 ```bash
-DATABASE_URL=postgresql://postgres.prgumgksuhinnyjlyzli:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_URL=postgresql://postgres.jfttevfwqonxasoahiby:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
 ```
 
 ---
@@ -121,6 +153,10 @@ DATABASE_URL=postgresql://postgres.prgumgksuhinnyjlyzli:PASSWORD@aws-0-ap-south-
 | `DB_CONNECT_ATTEMPTS` | no | `12` | Retries while the database wakes up |
 | `DB_CONNECT_DELAY_MS` | no | `5000` | Delay between retries |
 | `DB_FALLBACK` | no | `none` | `sqlite` boots with a local file if Postgres is down |
+| `SUPABASE_URL` | no | – | Supabase project URL — enables Supabase Auth |
+| `SUPABASE_PUBLISHABLE_KEY` | no | – | public key used for the auth endpoints |
+| `SUPABASE_SECRET_KEY` | no | – | server-only key: mirrors new accounts into Supabase Auth |
+| `SUPABASE_JWKS_URL` | no | derived | endpoint used to verify Supabase access tokens |
 | `LOG_LEVEL` | no | `info` | pino log level |
 | `APP_VERSION` | no | `3.0.0` | Shown on the health screen |
 | `REGION` | no | `Singapore · ap-southeast` | Shown on the health screen |
@@ -189,6 +225,8 @@ Base path `/api/v1`, everything except `register`, `login` and `refresh` needs
 | Symptom | Fix |
 | --- | --- |
 | `Could not reach the database at …` | The Supabase project is paused → restore it. The password is wrong → reset it in *Settings → Database*. The host is `db.<ref>.supabase.co` → switch to the **pooler** host, Render has no IPv6. |
+| `ENOTFOUND db.<ref>.supabase.co` | The direct host is IPv6-only and Render has no IPv6 → use `…pooler.supabase.com`. |
+| Login works locally but not on Render | The `DATABASE_URL` password is wrong, or the schema was never created in that database. |
 | `relation "users" does not exist` | The schema was not created → run `npm run migrate` locally against the same database. |
 | The app shows "Cannot reach the Duora server" | The service is still starting (first boot takes ~1 minute) or `duora.onrender.com` still serves the "Application loading" splash → check the Render logs. |
 | Login works but the app stays signed out | `JWT_ACCESS_SECRET` changed between restarts → keep the value stable in Render (the blueprint generates it once). |

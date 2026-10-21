@@ -5,7 +5,8 @@ import { db } from '../db';
 import { env } from '../env';
 import { ApiError, id, nowIso, asyncHandler } from '../util';
 import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken, requireAuth } from '../auth';
-import { ensureSettings, findByEmail, findById, toPublicUser, type PublicUser, type UserRow } from './users';
+import { createUser, ensureSettings, findByEmail, findById, toPublicUser, type PublicUser, type UserRow } from '../users';
+import { supabaseCreateUser, supabaseEnabled, supabaseSignIn } from '../supabase';
 import { Router } from 'express';
 import { validate } from '../http';
 
@@ -58,16 +59,44 @@ export async function register(input: {
 
   const user = await findById(userId);
   if (!user) throw ApiError.internal('User could not be created');
+
+  // Keep Supabase Auth in sync (only when a Supabase project is configured).
+  await supabaseCreateUser(email, input.password, input.displayName.trim());
+
   return issueTokens(user);
 }
 
 export async function login(input: { email: string; password: string }): Promise<AuthResult> {
-  const user = await findByEmail(input.email.toLowerCase().trim());
-  if (!user) throw ApiError.unauthorized('Email or password is wrong');
-  const ok = await bcrypt.compare(input.password, user.password_hash);
-  if (!ok) throw ApiError.unauthorized('Email or password is wrong');
-  await ensureSettings(user.id);
-  return issueTokens(user);
+  const email = input.email.toLowerCase().trim();
+  const user = await findByEmail(email);
+  if (user) {
+    const ok = await bcrypt.compare(input.password, user.password_hash);
+    if (ok) {
+      await ensureSettings(user.id);
+      return issueTokens(user);
+    }
+  }
+
+  // The password does not match the local account — let Supabase Auth decide.
+  if (supabaseEnabled()) {
+    const session = await supabaseSignIn(email, input.password);
+    if (session) {
+      const existing = await findByEmail(email);
+      if (existing) {
+        await ensureSettings(existing.id);
+        return issueTokens(existing);
+      }
+      const created = await createUser({
+        email,
+        passwordHash: 'supabase',
+        displayName: email.split('@')[0],
+      });
+      await ensureSettings(created.id);
+      return issueTokens(created);
+    }
+  }
+
+  throw ApiError.unauthorized('Email or password is wrong');
 }
 
 export async function refresh(refreshToken: string, meta: { userAgent?: string; ip?: string }): Promise<AuthResult> {

@@ -15,7 +15,7 @@ wakes on the next request (~30 s).
 
 ### Step 1 — the Supabase connection string (2 minutes)
 
-Your project: **sukhdevr898's Project**, ref `prgumgksuhinnyjlyzli`, region `ap-south-1`.
+Your project: **sukhdevr898's Project**, ref `jfttevfwqonxasoahiby`, region `ap-south-1`.
 
 1. [supabase.com/dashboard](https://supabase.com/dashboard) → open the project.
    *If it says **Paused**, click **Restore project** first — Render cannot reach a
@@ -25,8 +25,11 @@ Your project: **sukhdevr898's Project**, ref `prgumgksuhinnyjlyzli`, region `ap-
 4. **Connection string → URI** → copy the **Session pooler** (port `5432`):
 
    ```
-   postgresql://postgres.prgumgksuhinnyjlyzli:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+   postgresql://postgres.jfttevfwqonxasoahiby:<YOUR-PASSWORD>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
    ```
+
+   Percent-encode special characters in the password (`@` → `%40`, `:` → `%3A`,
+   `/` → `%2F`).
 
 > **Use the pooler host.** The plain `db.<ref>.supabase.co` host is IPv6-only and
 > Render has no IPv6 — the connection would fail with `ENOTFOUND`/`ETIMEDOUT`.
@@ -76,6 +79,10 @@ Environment:
 | `PUBLIC_BASE_URL` | `https://duora.onrender.com` |
 | `SEED_ON_BOOT` | `true` |
 | `LOG_LEVEL` | `info` |
+| `SUPABASE_URL` | `https://jfttevfwqonxasoahiby.supabase.co` |
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` (public) |
+| `SUPABASE_SECRET_KEY` | `sb_secret_…` (server only) |
+| `SUPABASE_JWKS_URL` | `https://jfttevfwqonxasoahiby.supabase.co/auth/v1/.well-known/jwks.json` |
 
 `PORT` is injected by Render — never hardcode it.
 
@@ -132,6 +139,24 @@ boot** — every statement is `IF NOT EXISTS`, so restarting is always safe.
 users · settings · pairings · conversations · conversation_participants
 messages · message_receipts · reactions · hidden_messages · notes
 devices · refresh_tokens · presence · call_sessions · anniversaries · quick_replies
+```
+
+### The schema is already applied
+
+The Duora tables (16) exist in the project `jfttevfwqonxasoahiby` — the API
+re-applies them on every boot anyway, and every statement is `IF NOT EXISTS`.
+
+### Supabase Auth (optional)
+
+Set `SUPABASE_URL` (+ the keys) and the API will also accept **Supabase access
+tokens** on every protected route, verified with the project's JWKS. Sign-in
+falls back to Supabase Auth when the local password does not match, and new
+accounts are mirrored into Supabase Auth.
+
+```bash
+# a Supabase access token works like any other bearer token
+curl https://duora.onrender.com/api/v1/auth/me \
+  -H "Authorization: Bearer <supabase-access-token>"
 ```
 
 ### Applying the schema by hand

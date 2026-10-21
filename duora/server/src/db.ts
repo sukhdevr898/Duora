@@ -103,6 +103,8 @@ class PostgresDb implements Db {
       max: 3,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 15_000,
+      // Supabase's pooler is used in session mode (port 5432) by default, so a
+      // connection keeps its session for as long as the pool holds it.
       // Supabase requires TLS. `sslmode=require` in the URL enables it.
       ssl: url.includes('sslmode=require') || url.includes('supabase')
         ? { rejectUnauthorized: false }
