@@ -37,6 +37,15 @@ const schema = z.object({
   ACCESS_TTL: z.string().default('30d'),
   REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
 
+  /**
+   * Supabase (optional). With `SUPABASE_URL` set the API can also use
+   * Supabase Auth: sign-in fallback and access-token verification (JWKS).
+   */
+  SUPABASE_URL: z.string().default(''),
+  SUPABASE_PUBLISHABLE_KEY: z.string().default(''),
+  SUPABASE_SECRET_KEY: z.string().default(''),
+  SUPABASE_JWKS_URL: z.string().default(''),
+
   CORS_ORIGINS: z.string().default(''),
   PUBLIC_BASE_URL: z.string().default(''),
   LOG_LEVEL: z.string().default('info'),
@@ -60,6 +69,7 @@ export const env = {
   ...raw,
   isProd: raw.NODE_ENV === 'production',
   isPostgres: raw.DATABASE_URL.startsWith('postgres://') || raw.DATABASE_URL.startsWith('postgresql://'),
+  supabaseUrl: raw.SUPABASE_URL.replace(/\/$/, ''),
   corsOrigins: raw.CORS_ORIGINS.split(',')
     .map((s) => s.trim())
     .filter(Boolean),

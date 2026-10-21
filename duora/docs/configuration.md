@@ -44,6 +44,10 @@ Only **three** values are mandatory. Everything else has a working default.
 | `DB_CONNECT_ATTEMPTS` | optional | retries while the database wakes up, default `12` |
 | `DB_CONNECT_DELAY_MS` | optional | delay between retries, default `5000` |
 | `DB_FALLBACK` | optional | `none` (default) or `sqlite` to boot with a local file |
+| `SUPABASE_URL` | optional | Supabase project URL — enables Supabase Auth |
+| `SUPABASE_PUBLISHABLE_KEY` | optional | public key for the auth endpoints |
+| `SUPABASE_SECRET_KEY` | optional | server-only key (mirrors new accounts into Supabase Auth) |
+| `SUPABASE_JWKS_URL` | optional | derived from `SUPABASE_URL` when empty |
 
 ### 1a. Generate the JWT secrets
 
@@ -75,7 +79,7 @@ Copy the connection string from
 **Supabase → Project Settings → Database → Connection string → URI**:
 
 ```env
-DATABASE_URL="postgresql://postgres.prgumgksuhinnyjlyzli:YOUR_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DATABASE_URL="postgresql://postgres.jfttevfwqonxasoahiby:YOUR_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
 ```
 
 - Use the **pooler** host (`…pooler.supabase.com`). The direct host
@@ -94,7 +98,24 @@ On boot the server pings the database and retries (`DB_CONNECT_ATTEMPTS` ×
 wrong password, paused project, missing pooler host. Set `DB_FALLBACK=sqlite`
 if the server should boot with a local file when Postgres is unreachable.
 
-### 1c. Seed the demo couple (optional)
+### 1c. Supabase Auth (optional)
+
+```env
+SUPABASE_URL="https://jfttevfwqonxasoahiby.supabase.co"
+SUPABASE_PUBLISHABLE_KEY="sb_publishable_…"
+SUPABASE_SECRET_KEY="sb_secret_…"          # server only — never in the app
+SUPABASE_JWKS_URL="https://jfttevfwqonxasoahiby.supabase.co/auth/v1/.well-known/jwks.json"
+```
+
+- The API accepts a **Supabase access token** on every protected route (RS256,
+  verified with the JWKS, issuer `…/auth/v1`, audience `authenticated`).
+- `POST /api/v1/auth/login` falls back to Supabase Auth when the local password
+  does not match — the account is then created locally.
+- `POST /api/v1/auth/register` mirrors the account into Supabase Auth.
+
+Without these variables the server keeps its own email + password auth.
+
+### 1d. Seed the demo couple (optional)
 
 ```bash
 cd duora/server
