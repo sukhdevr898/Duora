@@ -1,22 +1,21 @@
+/** The Express app: middleware, static media and the route table. */
 import express from 'express';
 import path from 'node:path';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import pinoHttp from 'pino-http';
-import { env } from './config/env';
-import { logger } from './config/logger';
-import { errorHandler, notFoundHandler } from './middleware/error.middleware';
-import { authRouter } from './modules/auth/auth.routes';
-import { appRouter } from './modules/app/app.routes';
-import { callsRouter } from './modules/calls/calls.routes';
-import { chatRouter } from './modules/chat/chat.routes';
-import { devicesRouter } from './modules/devices/devices.routes';
-import { notesRouter } from './modules/notes/notes.routes';
-import { pairingRouter } from './modules/pairing/pairing.routes';
-import { settingsRouter } from './modules/settings/settings.routes';
-import { usersRouter } from './modules/users/users.routes';
-import { healthPayload } from './modules/health/health.service';
+import { env, logger } from './env';
+import { errorHandler, notFoundHandler } from './http';
+import { authRouter } from './routes/auth';
+import { appRouter, healthPayload } from './routes/system';
+import { callsRouter } from './routes/calls';
+import { chatRouter } from './routes/chat';
+import { devicesRouter } from './routes/devices';
+import { notesRouter } from './routes/notes';
+import { pairingRouter } from './routes/pairing';
+import { settingsRouter } from './routes/settings';
+import { usersRouter } from './routes/users';
 
 export function createApp(): express.Express {
   const app = express();

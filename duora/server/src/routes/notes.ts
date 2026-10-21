@@ -1,6 +1,10 @@
-import { db } from '../../db/client';
-import { ApiError } from '../../utils/ApiError';
-import { id, nowIso } from '../../utils/ids';
+/** Memories (notes). */
+import { db } from '../db';
+import { ApiError, id, nowIso, asyncHandler } from '../util';
+import { Router } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../auth';
+import { validate } from '../http';
 
 export type NoteRow = {
   id: string;
@@ -117,3 +121,47 @@ export async function deleteNote(userId: string, noteId: string): Promise<void> 
   const result = await db().run('DELETE FROM notes WHERE id = ? AND owner_id = ?', [noteId, userId]);
   if (result.changes === 0) throw ApiError.notFound('Note not found');
 }
+
+const createSchema = z.object({
+  title: z.string().min(1).max(120),
+  body: z.string().max(2000).optional(),
+  category: z.enum(['ALL', 'PLAN', 'DAYS']).optional(),
+  imageUrl: z.string().nullable().optional(),
+  mood: z.string().max(40).nullable().optional(),
+});
+
+const updateSchema = createSchema.partial();
+
+export const notesRouter = Router();
+notesRouter.use(requireAuth);
+
+notesRouter.get(
+  '/',
+  asyncHandler(async (req, res) => {
+    res.json({ notes: await listNotes(req.user!.id) });
+  }),
+);
+
+notesRouter.post(
+  '/',
+  validate(createSchema),
+  asyncHandler(async (req, res) => {
+    res.status(201).json({ note: await createNote(req.user!.id, req.body as never) });
+  }),
+);
+
+notesRouter.patch(
+  '/:noteId',
+  validate(updateSchema),
+  asyncHandler(async (req, res) => {
+    res.json({ note: await updateNote(req.user!.id, req.params.noteId, req.body as never) });
+  }),
+);
+
+notesRouter.delete(
+  '/:noteId',
+  asyncHandler(async (req, res) => {
+    await deleteNote(req.user!.id, req.params.noteId);
+    res.status(204).send();
+  }),
+);

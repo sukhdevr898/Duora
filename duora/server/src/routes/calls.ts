@@ -1,7 +1,11 @@
-import { db } from '../../db/client';
-import { ApiError } from '../../utils/ApiError';
-import { id, nowIso } from '../../utils/ids';
-import { partnerOf } from '../pairing/pairing.service';
+/** Call log, start and end calls. */
+import { db } from '../db';
+import { ApiError, id, nowIso, asyncHandler } from '../util';
+import { partnerOf } from './pairing';
+import { Router } from 'express';
+import { z } from 'zod';
+import { requireAuth } from '../auth';
+import { validate, validatedQuery } from '../http';
 
 export type CallRow = {
   id: string;
@@ -100,7 +104,7 @@ export async function endCall(
   userId: string,
   callId: string,
   outcome: 'ENDED' | 'DECLINED' | 'CANCELLED' | 'MISSED' | 'FAILED' = 'ENDED',
-): Promise<void> {
+): Promise<CallLogItem> {
   const row = await db().one<CallRow>('SELECT * FROM call_sessions WHERE id = ?', [callId]);
   if (!row) throw ApiError.notFound('Call not found');
   if (row.caller_id !== userId && row.callee_id !== userId) {
@@ -109,10 +113,14 @@ export async function endCall(
   const now = nowIso();
   await db().run(
     `UPDATE call_sessions
-        SET status = ?, ended_at = ?, started_at = COALESCE(started_at, ?), updated_at = ?
+        SET status = ?, end_reason = ?, ended_at = ?, started_at = COALESCE(started_at, ?), updated_at = ?
       WHERE id = ?`,
-    [outcome, now, now, now, callId],
+    [outcome, outcome, now, now, now, callId],
   );
+
+  const item = (await listCalls(userId, 50)).find((call) => call.id === callId);
+  if (!item) throw ApiError.notFound('Call not found');
+  return item;
 }
 
 export async function statsFor(userId: string): Promise<{
@@ -156,3 +164,40 @@ function formatDay(date: Date): string {
   }
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
+
+const startSchema = z.object({ kind: z.enum(['voice', 'video']).default('voice') });
+const endSchema = z.object({
+  outcome: z.enum(['ENDED', 'DECLINED', 'CANCELLED', 'MISSED', 'FAILED']).default('ENDED'),
+});
+const listSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
+
+export const callsRouter = Router();
+callsRouter.use(requireAuth);
+
+callsRouter.get(
+  '/',
+  validate(listSchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const limit = validatedQuery<{ limit: number }>(req)?.limit ?? 50;
+    res.json({ calls: await listCalls(req.user!.id, limit) });
+  }),
+);
+
+callsRouter.post(
+  '/',
+  validate(startSchema),
+  asyncHandler(async (req, res) => {
+    const { kind } = req.body as { kind: 'voice' | 'video' };
+    res.status(201).json({ call: await startCall(req.user!.id, kind) });
+  }),
+);
+
+callsRouter.post(
+  '/:callId/end',
+  validate(endSchema),
+  asyncHandler(async (req, res) => {
+    const { outcome } = req.body as { outcome: 'ENDED' | 'DECLINED' | 'CANCELLED' | 'MISSED' | 'FAILED' };
+    const call = await endCall(req.user!.id, req.params.callId, outcome);
+    res.json({ call });
+  }),
+);

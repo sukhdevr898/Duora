@@ -20,7 +20,7 @@ duora/
 │  SecureStore secrets│ ───────────────────► ┌───────────────────▼──────────────┐
 │  design system      │                      │ Node.js service (server/)        │
 └─────────────────────┘                      │ Express + Socket.IO              │
-                                             │ node:sqlite  |  pg (Postgres)   │
+                                             │ node:sqlite  |  Supabase Postgres│
                                              │ media served from /img/…         │
                                              └───────────────────────────────────┘
 ```
@@ -78,26 +78,32 @@ API itself (`/img/…`), so the client never depends on a third-party CDN.
 
 ```
 src/
-├── index.ts, app.ts        bootstrap (migrate → seed → listen) + Express factory
-├── config/                 validated environment (zod), structured logger (pino)
-├── db/                     portable Db layer (node:sqlite | pg), schema + migrate
-├── middleware/             JWT auth, zod validation, error mapping
-├── modules/
-│   ├── auth/               register/login/refresh/logout/me (bcrypt + JWT)
-│   ├── users/              profile, settings, public user shape
-│   ├── pairing/            invitations, accept by code / QR token, unlink
-│   ├── chat/               conversations, messages, receipts, reactions, quick replies
-│   ├── calls/              call log, start/end calls
-│   ├── notes/              memories (CRUD)
-│   ├── settings/           user settings (theme, accent, notifications…)
-│   ├── devices/            push token registration
-│   ├── health/             health payload (services, database, uptime)
-│   ├── home/               the home screen payload in one call
-│   └── app/                /api/v1/home route
-├── websocket/              authenticated Socket.IO gateway + event catalogue
-├── utils/                  ApiError, asyncHandler, ids, jwt helpers
-└── seed.ts                 demo couple, conversation, notes, pairing code
+├── index.ts        bootstrap: wait for the database → migrate → seed → listen
+├── app.ts          the Express app, middleware and the route table
+├── env.ts          validated environment (zod) + the pino logger
+├── db.ts           the data layer (Postgres | SQLite), the retry loop, migrations
+├── auth.ts         JWT helpers + the `requireAuth` guard
+├── http.ts         zod request validation, error and not-found handlers
+├── realtime.ts     authenticated Socket.IO gateway + event catalogue
+├── seed.ts         demo couple, conversation, notes, pairing code
+├── util.ts         ApiError, asyncHandler, ids, timestamps
+├── schema.sql      the Postgres schema (Supabase)
+├── schema.sqlite.sql  the same schema for local SQLite
+└── routes/         one file per feature — routes, validation and SQL together
+    ├── auth.ts     register/login/refresh/logout/me (bcrypt + JWT)
+    ├── users.ts    profile and the public user shape
+    ├── pairing.ts  invitations, accept by code / QR token, unlink
+    ├── chat.ts     conversations, messages, receipts, reactions, quick replies
+    ├── calls.ts    call log, start/end calls
+    ├── notes.ts    memories (CRUD)
+    ├── settings.ts user settings (theme, accent, notifications…)
+    ├── devices.ts  push token registration
+    └── system.ts   health payload, the home payload and the bootstrap route
 ```
+
+One file per feature keeps the server easy to follow: the route, its validation
+and its SQL sit next to each other, and there is no service/schema/route
+trio to jump between.
 
 ### Identity and sessions
 
@@ -110,11 +116,17 @@ src/
 
 ### Database portability
 
-`src/db/client.ts` exposes one tiny interface (`one`, `all`, `run`) implemented twice:
-`node:sqlite` for local development and `pg` for the managed Render database.
-Placeholders are translated (`?` → `$n`). The 16-table schema exists twice —
-`src/db/schema.sqlite.sql` and `src/db/schema.postgres.sql` — and is applied on
-boot by `src/db/migrate.ts`, so a deploy is always schema-correct.
+`src/db.ts` exposes one tiny interface (`one`, `all`, `run`, `exec`, `transaction`,
+`ping`) implemented twice: `node:sqlite` for local development and `pg` for
+**Supabase Postgres** in production. Placeholders are translated (`?` → `$n`).
+The 16-table schema exists twice — `src/schema.sqlite.sql` and `src/schema.sql` —
+and is applied on boot by `migrate()`, so a deploy is always schema-correct.
+
+The driver is chosen by the URL scheme: anything starting with `postgresql://`
+uses Supabase, anything else is a local SQLite file. On boot the server pings the
+database and retries for up to a minute (`DB_CONNECT_ATTEMPTS` ×
+`DB_CONNECT_DELAY_MS`) before failing with a checklist of what to check — this
+covers the moment when Render starts the service before Supabase has woken up.
 
 ### Failure and honesty principles
 

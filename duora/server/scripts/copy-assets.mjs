@@ -1,13 +1,13 @@
 /**
  * Copies the SQL schema files into the compiled output.
- * `tsc` only emits JavaScript, but `src/db/migrate.ts` reads the schema from
- * disk next to the compiled module.
+ * `tsc` only emits JavaScript, but the migration reads the schema from disk
+ * next to the compiled module.
  */
 import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const from = join(process.cwd(), 'src', 'db');
-const to = join(process.cwd(), 'dist', 'db');
+const from = join(process.cwd(), 'src');
+const to = join(process.cwd(), 'dist');
 
 mkdirSync(to, { recursive: true });
 

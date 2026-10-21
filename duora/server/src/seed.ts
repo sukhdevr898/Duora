@@ -1,3 +1,9 @@
+/** Demo data so a fresh database is instantly usable. */
+import bcrypt from 'bcryptjs';
+import { db } from './db';
+import { env, logger } from './env';
+import { id, nowIso } from './util';
+
 /**
  * Seeds a real, workable couple: two accounts, a live pairing, a conversation
  * with history, notes, call history and settings.
@@ -6,12 +12,6 @@
  *
  * Credentials: sukhdev@duora.app / love1234  ·  ruhi@duora.app / love1234
  */
-import bcrypt from 'bcryptjs';
-import { db } from './db/client';
-import { migrate } from './db/migrate';
-import { env } from './config/env';
-import { logger } from './config/logger';
-import { id, nowIso } from './utils/ids';
 
 type SeedUser = {
   id: string;
@@ -28,8 +28,6 @@ export async function seed(options: { quiet?: boolean } = {}): Promise<void> {
     : (payload: unknown, message: string) => logger.info({ detail: String(payload) }, message);
   const now = nowIso();
   const base = (env.PUBLIC_BASE_URL || `http://localhost:${env.PORT}`).replace(/\/$/, '');
-
-  await migrate();
 
   const passwordHash = await bcrypt.hash('love1234', 10);
 
@@ -267,7 +265,7 @@ export async function seed(options: { quiet?: boolean } = {}): Promise<void> {
     {
       users: 2,
       conversation: conversationId,
-      driver: env.isPostgres ? 'postgres' : 'sqlite',
+      driver: db().dialect,
     },
     'seed complete',
   );

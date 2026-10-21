@@ -1,8 +1,26 @@
-import { db } from '../../db/client';
-import { ApiError } from '../../utils/ApiError';
-import { id, nowIso } from '../../utils/ids';
-import { conversationIdFor, partnerOf } from '../pairing/pairing.service';
-import { findById } from '../users/users.service';
+/** Conversations, messages, receipts, reactions and quick replies. */
+import { z } from 'zod';
+import { db } from '../db';
+import { ApiError, id, nowIso, asyncHandler } from '../util';
+import { conversationIdFor, partnerOf } from './pairing';
+import { findById } from './users';
+import { Router } from 'express';
+import { requireAuth } from '../auth';
+import { validate, validatedQuery } from '../http';
+
+export const sendMessageSchema = z.object({
+  clientMessageId: z.string().min(4).max(80),
+  text: z.string().max(4000).default(''),
+  sticker: z.string().max(40).nullable().optional(),
+});
+
+export const reactionSchema = z.object({
+  emoji: z.string().min(1).max(8),
+});
+
+export const listQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(60),
+});
 
 export type MessageRow = {
   id: string;
@@ -262,7 +280,7 @@ export async function markRead(userId: string, conversationId: string): Promise<
     await db().run(
       `INSERT INTO message_receipts (message_id, user_id, delivered_at, read_at)
        VALUES (?, ?, ?, ?)
-       ON CONFLICT(message_id, user_id) DO UPDATE SET read_at = COALESCE(read_at, ?)`,
+       ON CONFLICT(message_id, user_id) DO UPDATE SET read_at = COALESCE(message_receipts.read_at, ?)`,
       [row.id, userId, now, now, now],
     );
   }
@@ -338,3 +356,84 @@ function formatTime(iso: string): string {
     .replace(/\s/g, ' ')
     .replace(/^0/, '');
 }
+
+export const chatRouter = Router();
+chatRouter.use(requireAuth);
+
+chatRouter.get(
+  '/conversations',
+  asyncHandler(async (req, res) => {
+    res.json({ conversations: await listConversations(req.user!.id) });
+  }),
+);
+
+chatRouter.get(
+  '/conversations/:conversationId/messages',
+  validate(listQuerySchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const { limit } = validatedQuery<{ limit: number }>(req);
+    const messages = await listMessages(req.user!.id, req.params.conversationId, limit);
+    res.json({ messages });
+  }),
+);
+
+chatRouter.post(
+  '/conversations/:conversationId/messages',
+  validate(sendMessageSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as { clientMessageId: string; text: string; sticker?: string | null };
+    const message = await sendMessage(req.user!.id, req.params.conversationId, body);
+    res.status(201).json({ message });
+  }),
+);
+
+chatRouter.post(
+  '/conversations/:conversationId/read',
+  asyncHandler(async (req, res) => {
+    const count = await markRead(req.user!.id, req.params.conversationId);
+    res.json({ marked: count });
+  }),
+);
+
+chatRouter.post(
+  '/messages/:messageId/reactions',
+  validate(reactionSchema),
+  asyncHandler(async (req, res) => {
+    const { emoji } = req.body as { emoji: string };
+    const reactions = await toggleReaction(req.user!.id, req.params.messageId, emoji);
+    res.json({ reactions });
+  }),
+);
+
+chatRouter.delete(
+  '/messages/:messageId',
+  asyncHandler(async (req, res) => {
+    await hideMessage(req.user!.id, req.params.messageId);
+    res.status(204).send();
+  }),
+);
+
+/** Quick-reply suggestions the composer shows. */
+chatRouter.get(
+  '/quick-replies',
+  asyncHandler(async (_req, res) => {
+    res.json({
+      replies: [
+        'Miss you ✨',
+        'Call me 💖',
+        '❤️',
+        'Good night 🌙',
+        'Love you 💜',
+      ],
+    });
+  }),
+);
+
+chatRouter.get(
+  '/partner',
+  asyncHandler(async (req, res) => {
+    const conversationId = await myConversationId(req.user!.id);
+    if (!conversationId) throw ApiError.notFound('You are not paired yet');
+    res.json({ conversationId, partnerName: await partnerName(req.user!.id) });
+  }),
+);

@@ -1,10 +1,31 @@
+/** Sign up, sign in, refresh, sign out and the current user. */
+import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { db } from '../../db/client';
-import { env } from '../../config/env';
-import { ApiError } from '../../utils/ApiError';
-import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
-import { id, nowIso } from '../../utils/ids';
-import { ensureSettings, findByEmail, findById, toPublicUser, type PublicUser, type UserRow } from '../users/users.service';
+import { db } from '../db';
+import { env } from '../env';
+import { ApiError, id, nowIso, asyncHandler } from '../util';
+import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken, requireAuth } from '../auth';
+import { ensureSettings, findByEmail, findById, toPublicUser, type PublicUser, type UserRow } from './users';
+import { Router } from 'express';
+import { validate } from '../http';
+
+export const registerSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  displayName: z.string().min(1, 'Tell us your name').max(40),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export const refreshSchema = z.object({
+  refreshToken: z.string().min(10),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
 
 export type AuthResult = {
   user: PublicUser;
@@ -112,3 +133,52 @@ async function issueTokens(
     expiresIn: env.ACCESS_TTL,
   };
 }
+
+export const authRouter = Router();
+
+authRouter.post(
+  '/register',
+  validate(registerSchema),
+  asyncHandler(async (req, res) => {
+    const result = await register(req.body as never);
+    res.status(201).json(result);
+  }),
+);
+
+authRouter.post(
+  '/login',
+  validate(loginSchema),
+  asyncHandler(async (req, res) => {
+    const result = await login(req.body as never);
+    res.json(result);
+  }),
+);
+
+authRouter.post(
+  '/refresh',
+  validate(refreshSchema),
+  asyncHandler(async (req, res) => {
+    const result = await refresh(
+      (req.body as { refreshToken: string }).refreshToken,
+      { userAgent: req.headers['user-agent'], ip: req.ip },
+    );
+    res.json(result);
+  }),
+);
+
+authRouter.post(
+  '/logout',
+  validate(refreshSchema),
+  asyncHandler(async (req, res) => {
+    await logout((req.body as { refreshToken: string }).refreshToken);
+    res.status(204).send();
+  }),
+);
+
+authRouter.get(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.json({ user: await me(req.user!.id) });
+  }),
+);
