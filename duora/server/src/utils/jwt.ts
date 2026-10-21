@@ -1,5 +1,5 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { env } from '../config/env';
 
 export type AccessPayload = {
@@ -19,9 +19,17 @@ export function signAccessToken(user: { id: string; email: string; displayName: 
   return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: env.ACCESS_TTL } as SignOptions);
 }
 
+/**
+ * Every refresh token carries a random id.
+ *
+ * Without it two tokens signed inside the same second would be byte identical
+ * (the JWT `iat` claim only has second precision) and the second insert into
+ * `refresh_sessions` would fail on the unique token hash.
+ */
 export function signRefreshToken(userId: string): string {
   return jwt.sign({ sub: userId, type: 'refresh' }, env.JWT_REFRESH_SECRET, {
     expiresIn: `${env.REFRESH_TTL_DAYS}d`,
+    jwtid: randomUUID(),
   } as SignOptions);
 }
 

@@ -165,7 +165,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     history: [38, 44, 41, 52, 47, 43, 39, 45, 48, 40, 36, 44],
     uptimeSeconds: 12 * 24 * 3600 + 4 * 3600 + 12 * 60,
     region: 'Singapore · ap-southeast',
-    apiBase: 'https://duora-server.onrender.com',
+    apiBase: 'https://duora.onrender.com',
     version: 'v1.0.0',
     lastChecked: Date.now(),
     autoReconnect: persisted.autoReconnect ?? true,
