@@ -12,6 +12,9 @@ import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { accentList } from '../../src/theme/tokens';
 import { settingSections } from '../../src/data/settingsSections';
 import { useStore } from '../../src/state/store';
+import { describeBaseUrl } from '../../src/api/client';
+import { usePrivacy } from '../../src/state/privacy';
+import { privacyIconInfo } from '../../src/privacy/icons';
 import type { UserSettings } from '../../src/api/types';
 
 const TOGGLE_KEY = 'duora.toggles.v1';
@@ -58,6 +61,8 @@ export default function SubSettingsScreen() {
   const pairing = useStore((s) => s.pairing);
   const home = useStore((s) => s.home);
   const settings = useStore((s) => s.settings);
+  const server = useStore((s) => s.server);
+  const privacyIcon = usePrivacy((s) => s.icon);
   const updateSettings = useStore((s) => s.updateSettings);
 
   const key = String(section ?? 'account');
@@ -88,7 +93,20 @@ export default function SubSettingsScreen() {
   }, [settings]);
 
   const partnerName =
-    pairing?.partner?.nickname ?? pairing?.partner?.displayName ?? home?.partner?.nickname ?? 'your partner';
+    pairing?.partner?.nickname ?? pairing?.partner?.displayName ?? home?.partner?.nickname ?? 'your person';
+
+  /** The server we are talking to, with the live ping. */
+  const serverLine = useMemo(() => {
+    const base = describeBaseUrl();
+    if (server.status !== 'online') return `${base} · offline`;
+    return server.latency ? `${base} · ${server.latency} ms` : base;
+  }, [server.status, server.latency]);
+
+  const todayLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+    [],
+  );
 
   /** Live values for the account section — pulled from the server, never mock. */
   const liveValues = useMemo<Record<string, string>>(() => {
@@ -105,14 +123,16 @@ export default function SubSettingsScreen() {
       'Display name': user?.displayName ?? '—',
       Handle: user?.email ? `@${user.email.split('@')[0]}` : '—',
       Email: user?.email ?? '—',
-      Phone: '+91 98••• ••42',
+      Phone: 'Not added',
       Partner: partnerName,
       'Matched on': matchedOn,
       'Love theme': accentName,
       'This phone': 'Active now',
-      'Duora for Web': 'Connected',
+      'Duora for Web': serverLine,
+      'App icon': privacyIconInfo(privacyIcon).label,
+      'Date format': todayLabel,
     };
-  }, [user, pairing, settings, partnerName]);
+  }, [user, pairing, settings, partnerName, privacyIcon, serverLine, todayLabel]);
 
   const toggle = async (label: string, value: boolean) => {
     setToggles((prev) => {
@@ -207,7 +227,13 @@ export default function SubSettingsScreen() {
                     return (
                       <PressableScale
                         key={item.label}
-                        onPress={() => toast(`${item.label} — coming soon`)}
+                        onPress={() => {
+                          if (item.route) {
+                            router.push(item.route as never);
+                            return;
+                          }
+                          toast(`${item.label} — coming soon`);
+                        }}
                         accessibilityLabel={item.label}
                         style={[
                           styles.row,

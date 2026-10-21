@@ -8,6 +8,7 @@
  * • every failure is turned into a friendly, human readable message
  */
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import type {
   AuthResult,
@@ -73,6 +74,27 @@ export function describeBaseUrl(): string {
   return API_BASE_URL ? API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '') : 'same origin';
 }
 
+/**
+ * Media (avatars, note photos) can point at the host the API happens to run
+ * on. When the app talks to a different host — a browser preview, a phone on
+ * another network — that address is unreachable, so rewrite it to the API the
+ * app is actually using.
+ */
+export function resolveMediaUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('/')) {
+    return API_BASE_URL ? `${API_BASE_URL}${url}` : url;
+  }
+  try {
+    const parsed = new URL(url);
+    const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(parsed.hostname);
+    if (!isLocal) return url;
+    return `${API_BASE_URL}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+}
+
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 let onUnauthorized: (() => void) | null = null;
@@ -89,21 +111,56 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
-export async function loadRefreshToken(): Promise<string | null> {
+/**
+ * The keystore is the right home for the refresh token on a phone, but it
+ * does not exist on the web. There we fall back to AsyncStorage so a
+ * browser reload keeps the session instead of dropping the person out.
+ */
+async function readStoredToken(): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(REFRESH_KEY);
+    const value = await SecureStore.getItemAsync(REFRESH_KEY);
+    if (value) return value;
+  } catch {
+    /* no keystore here — fall through */
+  }
+  try {
+    return await AsyncStorage.getItem(REFRESH_KEY);
   } catch {
     return null;
   }
 }
 
-export async function storeRefreshToken(token: string | null): Promise<void> {
+async function writeStoredToken(token: string | null): Promise<void> {
   try {
-    if (token) await SecureStore.setItemAsync(REFRESH_KEY, token);
-    else await SecureStore.deleteItemAsync(REFRESH_KEY);
+    if (token) {
+      await SecureStore.setItemAsync(REFRESH_KEY, token);
+    } else {
+      await SecureStore.deleteItemAsync(REFRESH_KEY);
+    }
+    // The keystore has it - make sure no plain copy is left behind.
+    try {
+      await AsyncStorage.removeItem(REFRESH_KEY);
+    } catch {
+      /* ignore */
+    }
+    return;
   } catch {
-    /* keystore unavailable — session stays in memory only */
+    /* no keystore here - fall through to plain storage */
   }
+  try {
+    if (token) await AsyncStorage.setItem(REFRESH_KEY, token);
+    else await AsyncStorage.removeItem(REFRESH_KEY);
+  } catch {
+    /* nothing else to try */
+  }
+}
+
+export async function loadRefreshToken(): Promise<string | null> {
+  return readStoredToken();
+}
+
+export async function storeRefreshToken(token: string | null): Promise<void> {
+  await writeStoredToken(token);
 }
 
 export class ApiError extends Error {
@@ -421,6 +478,13 @@ export const api = {
     request<{ call: CallLogItem }>('/api/v1/calls', { method: 'POST', body: { kind } }),
   endCall: (callId: string) =>
     request<{ call: CallLogItem }>(`/api/v1/calls/${callId}/end`, { method: 'POST' }),
+  answerCall: (callId: string) =>
+    request<{ call: CallLogItem }>(`/api/v1/calls/${callId}/answer`, { method: 'POST' }),
+  rejectCall: (callId: string) =>
+    request<{ call: CallLogItem }>(`/api/v1/calls/${callId}/reject`, { method: 'POST' }),
+
+  /* chat extras */
+  quickReplies: () => request<{ replies: string[] }>('/api/v1/chat/quick-replies'),
 
   /* notes */
   notes: () => request<{ notes: NoteItem[] }>('/api/v1/notes'),

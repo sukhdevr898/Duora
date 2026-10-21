@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,11 +10,19 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import type { LucideIcon } from 'lucide-react-native';
 import { useDuoraTheme } from '../theme/ThemeProvider';
-import { radii } from '../theme/tokens';
+import { ABSOLUTE_FILL, radii } from '../theme/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -62,6 +70,31 @@ export const PressableScale = memo(function PressableScale({
 /* ------------------------------------------------------------------ */
 type BtnVariant = 'primary' | 'soft' | 'ghost' | 'outline';
 
+/**
+ * A soft light band that travels across the button while it is busy - the
+ * same "something is happening" cue every native app uses.
+ */
+function LoadingShimmer({ width }: { width: number }) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withRepeat(
+      withTiming(1, { duration: 1250, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      false,
+    );
+  }, [progress]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { skewX: '-18deg' },
+      { translateX: -170 + progress.value * (width + 340) },
+    ],
+  }));
+
+  return <Animated.View pointerEvents="none" style={[styles.shimmer, style]} />;
+}
+
 export const Btn = memo(function Btn({
   label,
   onPress,
@@ -86,6 +119,7 @@ export const Btn = memo(function Btn({
 }) {
   const { t, shadow } = useDuoraTheme();
   const blocked = Boolean(disabled || loading);
+  const [width, setWidth] = useState(0);
 
   const content = (
     <View style={styles.btnRow}>
@@ -113,12 +147,15 @@ export const Btn = memo(function Btn({
         colors={[t.primary2, t.primary]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         style={[styles.btn, block && styles.block, shadow('primary'), style]}
       >
         {content}
+        {loading && width > 0 ? <LoadingShimmer width={width} /> : null}
       </LinearGradient>
     ) : (
       <View
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         style={[
           styles.btn,
           block && styles.block,
@@ -137,6 +174,7 @@ export const Btn = memo(function Btn({
         ]}
       >
         {content}
+        {loading && width > 0 ? <LoadingShimmer width={width} /> : null}
       </View>
     );
 
@@ -229,6 +267,65 @@ export const Chip = memo(function Chip({
   );
 });
 
+
+/* ------------------------------------------------------------------ */
+/* Segmented control (.segmented)                                     */
+/* ------------------------------------------------------------------ */
+
+export const Segmented = memo(function Segmented({
+  options,
+  value,
+  onChange,
+  style,
+}: {
+  options: { key: string; label: string }[];
+  value: string;
+  onChange: (key: string) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { t, shadow } = useDuoraTheme();
+
+  return (
+    <View
+      style={[
+        styles.segmented,
+        { backgroundColor: t.fieldBg, borderColor: t.line },
+        style,
+      ]}
+      accessibilityRole="tablist"
+    >
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
+          <Pressable
+            key={option.key}
+            onPress={() => onChange(option.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={option.label}
+            style={styles.segment}
+          >
+            {active ? (
+              <Animated.View
+                entering={FadeIn.duration(180)}
+                style={[styles.segmentPill, { backgroundColor: t.card }, shadow('xs')]}
+              />
+            ) : null}
+            <Text
+              style={[
+                styles.segmentLabel,
+                { color: active ? t.primaryDeep : t.text3 },
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
+
 /* ------------------------------------------------------------------ */
 /* Card (.card)                                                       */
 /* ------------------------------------------------------------------ */
@@ -293,6 +390,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   block: {
     width: '100%',
@@ -306,6 +404,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.1,
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 110,
+    backgroundColor: 'rgba(255,255,255,0.26)',
   },
   iconBtn: {
     alignItems: 'center',
@@ -340,4 +446,23 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '700',
   },
+  segmented: {
+    flexDirection: 'row',
+    borderRadius: 999,
+    padding: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  segment: {
+    flex: 1,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  segmentPill: {
+    ...ABSOLUTE_FILL,
+    borderRadius: 999,
+  },
+  segmentLabel: { fontSize: 13, fontWeight: '800' },
 });

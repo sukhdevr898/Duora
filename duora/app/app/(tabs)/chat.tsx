@@ -26,6 +26,8 @@ export default function ChatsScreen() {
   const insets = useSafeAreaInsets();
   const { t, shadow } = useDuoraTheme();
   const conversations = useStore((s) => s.conversations);
+  const notes = useStore((s) => s.notes);
+  const pairing = useStore((s) => s.pairing);
   const loadConversations = useStore((s) => s.loadConversations);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
@@ -45,7 +47,7 @@ export default function ChatsScreen() {
       photo: c.partner?.avatarUrl ?? null,
       preview: c.lastMessage?.sticker
         ? 'Sent a sticker'
-        : (c.lastMessage?.text ?? 'Say something lovely 💖'),
+        : (c.lastMessage?.text ?? 'Say something lovely'),
       time: c.lastMessage
         ? new Date(c.lastMessage.createdAt).toLocaleTimeString('en-US', {
             hour: 'numeric',
@@ -57,13 +59,16 @@ export default function ChatsScreen() {
       online: c.partner?.online ?? false,
     }));
 
+    // Two real shortcuts - the notes you wrote and the pairing state.
     const special = [
       {
         id: 'c-notes',
         name: 'Shared memories',
         photo: null,
-        preview: 'Our First Call · saved in our space',
-        time: 'yesterday',
+        preview: notes.length
+          ? `${notes.length} ${notes.length === 1 ? 'memory' : 'memories'} saved in our space`
+          : 'Write your first memory together',
+        time: notes[0] ? 'recent' : '',
         unread: 0,
         online: false,
         special: true as const,
@@ -72,8 +77,10 @@ export default function ChatsScreen() {
         id: 'c-vault',
         name: 'Secret corner',
         photo: null,
-        preview: 'A note only you two can read',
-        time: 'this week',
+        preview: pairing?.code
+          ? `Pairing code ${pairing.code} · share it with your person`
+          : 'Only the two of you can read this',
+        time: pairing?.phase === 'matched' ? 'paired' : '',
         unread: 0,
         online: false,
         special: true as const,
@@ -81,7 +88,7 @@ export default function ChatsScreen() {
     ];
 
     return [...real, ...special];
-  }, [conversations]);
+  }, [conversations, notes, pairing]);
 
   const filtered = chats.filter(
     (c) =>
@@ -200,7 +207,7 @@ export default function ChatsScreen() {
             <View style={styles.footer}>
               <Lock size={11} strokeWidth={2.2} color={t.text3} />
               <Text style={[styles.footerText, { color: t.text3 }]}>
-                End-to-end private · just you two
+                Private by default · just you two
               </Text>
             </View>
           </View>
@@ -240,7 +247,7 @@ export default function ChatsScreen() {
             <View style={styles.footer}>
               <Lock size={12} strokeWidth={2.2} color={t.text3} />
               <Text style={[styles.footerText, { color: t.text3 }]}>
-                End-to-end private · just you two
+                Private by default · just you two
               </Text>
             </View>
           </View>

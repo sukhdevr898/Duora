@@ -34,6 +34,7 @@ import type {
   ServerInfo,
   UserSettings,
 } from '../api/types';
+import { realtime } from '../api/socket';
 import type { AccentKey, ThemeMode } from '../theme/tokens';
 
 const THEME_KEY = 'duora.theme.v1';
@@ -48,6 +49,23 @@ type PersistedTheme = {
 };
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+
+/** A call that is ringing on this device. */
+export type IncomingCall = {
+  callId: string;
+  fromUserId: string;
+  fromName: string;
+  kind: 'voice' | 'video';
+  at: number;
+};
+
+/** The call this device is in (outgoing or accepted). */
+export type ActiveCall = {
+  callId: string;
+  kind: 'voice' | 'video';
+  state: 'ringing' | 'active' | 'ended';
+  startedAt: number | null;
+};
 
 type Store = {
   /* ---------------- auth ---------------- */
@@ -105,15 +123,32 @@ type Store = {
   acceptToken: (token: string) => Promise<boolean>;
   unlink: () => Promise<void>;
 
+  /* ---------------- realtime ---------------- */
+  realtimeConnected: boolean;
+  partnerOnline: boolean;
+  partnerTyping: boolean;
+  incomingCall: IncomingCall | null;
+  activeCall: ActiveCall | null;
+  connectRealtime: () => void;
+  disconnectRealtime: () => void;
+  answerIncomingCall: () => Promise<void>;
+  declineIncomingCall: () => Promise<void>;
+  setTyping: (conversationId: string, typing: boolean) => void;
+
   /* ---------------- domain data ---------------- */
   home: HomePayload | null;
   conversations: ConversationSummary[];
   messages: ChatMessage[];
+  /** The shortcuts the server suggests for this couple. */
+  quickReplies: string[];
+  /** Which conversation the loaded messages belong to. */
+  messagesFor: string | null;
   notes: NoteItem[];
   calls: CallLogItem[];
   dataLoading: boolean;
   loadHome: () => Promise<void>;
   loadConversations: () => Promise<void>;
+  loadQuickReplies: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
   loadNotes: () => Promise<void>;
   createNote: (input: { title: string; body?: string; category?: string; mood?: string | null }) => Promise<void>;
@@ -163,6 +198,7 @@ export const useStore = create<Store>((set, get) => ({
       // before giving up on the stored session.
       const user = await withRetry(() => api.me(), 3, 3000);
       set({ user, authStatus: 'authenticated' });
+      get().connectRealtime();
       await get().loadPairing();
       await get().refreshAll();
     } catch (err) {
@@ -183,6 +219,7 @@ export const useStore = create<Store>((set, get) => ({
       // few times before telling the user something went wrong.
       const result = await withRetry(() => api.login(email, password), 3, 3000);
       set({ user: result.user, authStatus: 'authenticated', authBusy: false, authError: null });
+      get().connectRealtime();
       await get().hydrateTheme();
       await get().pushSettings();
       await get().loadPairing();
@@ -199,6 +236,7 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const result = await withRetry(() => api.register(email, password, displayName), 2, 3000);
       set({ user: result.user, authStatus: 'authenticated', authBusy: false, authError: null });
+      get().connectRealtime();
       await get().hydrateTheme();
       await get().pushSettings();
       await get().loadPairing();
@@ -212,6 +250,7 @@ export const useStore = create<Store>((set, get) => ({
 
   logout: async () => {
     await api.logout();
+    get().disconnectRealtime();
     set({
       user: null,
       authStatus: 'anonymous',
@@ -258,6 +297,7 @@ export const useStore = create<Store>((set, get) => ({
     // The session belongs to the old server — start clean.
     await storeRefreshToken(null);
     setAccessToken(null);
+    get().disconnectRealtime();
     set((prev) => ({
       serverUrl: normalized,
       serverUrlSaved: true,
@@ -547,10 +587,135 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
+  /* ---------------- realtime ---------------- */
+  realtimeConnected: false,
+  partnerOnline: false,
+  partnerTyping: false,
+  incomingCall: null,
+  activeCall: null,
+
+  connectRealtime: () => {
+    realtime.connect({
+      onConnected: (connected) => set({ realtimeConnected: connected }),
+      onMessage: (raw) => {
+        const current = get().messagesFor;
+        if (current && raw.conversationId !== current) {
+          // The thread is not open — refresh the list so the unread badge is right.
+          void get().loadConversations();
+          return;
+        }
+        // The server sends one message to the whole room, so "me" depends on
+        // who is reading it.
+        const me = get().user?.id;
+        const message: ChatMessage = raw.senderId && me
+          ? { ...raw, from: raw.senderId === me ? 'me' : 'partner' }
+          : raw;
+        set((prev) => {
+          if (!current) return prev;
+          const known = prev.messages.findIndex(
+            (m) => m.id === message.id || m.clientMessageId === message.clientMessageId,
+          );
+          if (known === -1) return { messages: [...prev.messages, message] };
+          const messages = [...prev.messages];
+          messages[known] = { ...messages[known], ...message };
+          return { messages };
+        });
+      },
+      onMessageStatus: ({ messageId, status }) => {
+        set((prev) => ({
+          messages: prev.messages.map((m) =>
+            m.id === messageId || m.clientMessageId === messageId
+              ? { ...m, status: status as ChatMessage['status'] }
+              : m,
+          ),
+        }));
+      },
+      onTyping: ({ conversationId, typing }) => {
+        if (conversationId !== get().messagesFor) return;
+        set({ partnerTyping: typing });
+      },
+      onPresence: ({ userId, online }) => {
+        set((prev) => ({
+          partnerOnline: prev.user && userId !== prev.user.id ? online : prev.partnerOnline,
+        }));
+      },
+      onPairMatched: () => {
+        void get().loadPairing();
+        void get().refreshAll();
+      },
+      onCallIncoming: (payload) => {
+        set({
+          incomingCall: { ...payload, at: Date.now() },
+        });
+      },
+      onCallAnswered: ({ callId }) => {
+        set((prev) => ({
+          activeCall:
+            prev.activeCall?.callId === callId
+              ? { ...prev.activeCall, state: 'active', startedAt: Date.now() }
+              : prev.activeCall,
+        }));
+      },
+      onCallDeclined: ({ callId }) => {
+        set((prev) => ({
+          activeCall:
+            prev.activeCall?.callId === callId ? { ...prev.activeCall, state: 'ended' } : prev.activeCall,
+          incomingCall: prev.incomingCall?.callId === callId ? null : prev.incomingCall,
+        }));
+      },
+      onCallEnded: ({ callId }) => {
+        set((prev) => ({
+          activeCall:
+            prev.activeCall?.callId === callId ? { ...prev.activeCall, state: 'ended' } : prev.activeCall,
+          incomingCall: prev.incomingCall?.callId === callId ? null : prev.incomingCall,
+        }));
+        void get().loadCalls();
+      },
+    });
+  },
+
+  disconnectRealtime: () => {
+    realtime.disconnect();
+    set({ realtimeConnected: false, partnerTyping: false });
+  },
+
+  answerIncomingCall: async () => {
+    const call = get().incomingCall;
+    if (!call) return;
+    set({
+      incomingCall: null,
+      activeCall: { callId: call.callId, kind: call.kind, state: 'active', startedAt: Date.now() },
+    });
+    realtime.answerCall(call.callId);
+    try {
+      await api.answerCall(call.callId);
+    } catch {
+      /* the socket already told the partner */
+    }
+  },
+
+  declineIncomingCall: async () => {
+    const call = get().incomingCall;
+    if (!call) return;
+    set({ incomingCall: null });
+    realtime.rejectCall(call.callId);
+    try {
+      await api.rejectCall(call.callId);
+    } catch {
+      /* the socket already told the caller */
+    }
+  },
+
+  setTyping: (conversationId, typing) => {
+    realtime.setTyping(conversationId, typing);
+  },
+
   /* ---------------- domain data ---------------- */
   home: null,
   conversations: [],
   messages: [],
+  messagesFor: null,
+  quickReplies: [],
   notes: [],
   calls: [],
   dataLoading: false,
@@ -572,10 +737,20 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
 
+  loadQuickReplies: async () => {
+    try {
+      const { replies } = await api.quickReplies();
+      if (Array.isArray(replies) && replies.length) set({ quickReplies: replies });
+    } catch {
+      /* the composer still works without them */
+    }
+  },
+
   loadMessages: async (conversationId) => {
     try {
       const { messages } = await api.messages(conversationId);
-      set({ messages });
+      set({ messages, messagesFor: conversationId });
+      realtime.markRead(conversationId);
     } catch {
       /* keep last known list */
     }
@@ -611,7 +786,12 @@ export const useStore = create<Store>((set, get) => ({
   startCall: async (kind) => {
     try {
       const { call } = await api.startCall(kind);
-      set((prev) => ({ calls: [call, ...prev.calls] }));
+      set((prev) => ({
+        calls: [call, ...prev.calls],
+        activeCall: { callId: call.id, kind, state: 'ringing', startedAt: null },
+      }));
+      // Ring the partner on the realtime channel.
+      realtime.inviteCall(kind, call.id);
       return call.id;
     } catch {
       return null;
@@ -621,10 +801,14 @@ export const useStore = create<Store>((set, get) => ({
   endCall: async (callId) => {
     try {
       const { call } = await api.endCall(callId);
-      set((prev) => ({ calls: prev.calls.map((c) => (c.id === call.id ? call : c)) }));
+      set((prev) => ({
+        calls: prev.calls.map((c) => (c.id === call.id ? call : c)),
+        activeCall: prev.activeCall?.callId === callId ? { ...prev.activeCall, state: 'ended' } : prev.activeCall,
+      }));
     } catch {
       /* keep the local copy */
     }
+    realtime.endCall(callId);
   },
 
   sendMessage: async (conversationId, text, sticker) => {
@@ -633,6 +817,7 @@ export const useStore = create<Store>((set, get) => ({
       id: clientMessageId,
       clientMessageId,
       conversationId,
+      senderId: get().user?.id ?? '',
       from: 'me',
       text,
       sticker: sticker ?? null,
@@ -677,6 +862,7 @@ export const useStore = create<Store>((set, get) => ({
     await Promise.all([
       get().loadHome(),
       get().loadConversations(),
+      get().loadQuickReplies(),
       get().loadNotes(),
       get().loadCalls(),
       get().checkServer(),

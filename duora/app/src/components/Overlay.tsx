@@ -10,8 +10,9 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check } from 'lucide-react-native';
+import { AlertCircle, Check, Info } from 'lucide-react-native';
 import { useDuoraTheme } from '../theme/ThemeProvider';
+import { RichText } from './RichText';
 
 /* ------------------------------------------------------------------ */
 /* Bottom sheet                                                       */
@@ -38,7 +39,9 @@ export function Sheet({ visible, onClose, title, subtitle, children, contentStyl
           style={[
             styles.sheet,
             {
-              backgroundColor: t.card,
+              // The sheet sits on top of the app, so it needs to be solid -
+              // a translucent card let the page underneath bleed through.
+              backgroundColor: t.surface,
               borderColor: t.line,
               paddingBottom: insets.bottom + 18,
             },
@@ -63,23 +66,30 @@ export function Sheet({ visible, onClose, title, subtitle, children, contentStyl
 /* ------------------------------------------------------------------ */
 /* Toast                                                              */
 /* ------------------------------------------------------------------ */
-type ToastCtx = { toast: (message: string) => void };
+export type ToastTone = 'info' | 'success' | 'error';
+
+type ToastCtx = { toast: (message: string, tone?: ToastTone) => void };
 const ToastContext = createContext<ToastCtx>({ toast: () => undefined });
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const { t } = useDuoraTheme();
   const [message, setMessage] = useState<string | null>(null);
+  const [tone, setTone] = useState<ToastTone>('info');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const toast = useCallback((msg: string) => {
+  const toast = useCallback((msg: string, nextTone: ToastTone = 'info') => {
+    setTone(nextTone);
     setMessage(msg);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setMessage(null), 2100);
+    timer.current = setTimeout(() => setMessage(null), 2400);
   }, []);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
+
+  const accent = tone === 'success' ? t.mint : tone === 'error' ? t.danger : t.primary;
+  const ToneIcon = tone === 'success' ? Check : tone === 'error' ? AlertCircle : Info;
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -90,9 +100,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           exiting={FadeOut.duration(140)}
           style={[styles.toast, { backgroundColor: t.text }]}
           pointerEvents="none"
+          accessibilityRole="alert"
         >
-          <Check size={15} strokeWidth={3} color={t.bg} />
-          <Text style={[styles.toastText, { color: t.bg }]}>{message}</Text>
+          <View style={[styles.toastIcon, { backgroundColor: `${accent}33` }]}>
+            <ToneIcon size={13} strokeWidth={3} color={accent} />
+          </View>
+          <RichText text={message} size={12.5} color={t.bg} style={styles.toastText} />
         </Animated.View>
       ) : null}
     </ToastContext.Provider>
@@ -148,6 +161,13 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 10,
+  },
+  toastIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toastText: {
     flex: 1,

@@ -57,6 +57,15 @@ export function ThemeProvider({
   const mode: 'light' | 'dark' =
     themePreference === 'system' ? (systemScheme === 'light' ? 'light' : 'dark') : themePreference;
 
+  const tokens = useMemo(() => resolveTokens(mode, accent), [mode, accent]);
+
+  // One stable shadow helper for the whole tree - building it per call meant
+  // resolving the whole palette on every shadowed view.
+  const shadowFor = useMemo(
+    () => (level: ShadowLevel) => shadow(level, mode, tokens.primary),
+    [mode, tokens],
+  );
+
   const value = useMemo<ThemeValue>(
     () => ({
       mode,
@@ -65,15 +74,29 @@ export function ThemeProvider({
       loveMode,
       heartMotion,
       glass,
-      t: resolveTokens(mode, accent),
-      shadow: (level: ShadowLevel) => shadow(level, mode, resolveTokens(mode, accent).primary),
+      t: tokens,
+      shadow: shadowFor,
       setMode: controller.setThemePreference,
       setAccent: controller.setAccent,
       setLoveMode: controller.setLoveMode,
       setHeartMotion: controller.setHeartMotion,
       setGlass: controller.setGlass,
     }),
-    [mode, themePreference, accent, loveMode, heartMotion, glass, controller],
+    [
+      mode,
+      themePreference,
+      accent,
+      loveMode,
+      heartMotion,
+      glass,
+      tokens,
+      shadowFor,
+      controller.setThemePreference,
+      controller.setAccent,
+      controller.setLoveMode,
+      controller.setHeartMotion,
+      controller.setGlass,
+    ],
   );
 
   return (

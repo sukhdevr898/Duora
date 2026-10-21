@@ -3,7 +3,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import Animated, { useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { ArrowLeft, Flashlight, FlashlightOff, ScanLine, Sparkles } from 'lucide-react-native';
 import { PressableScale } from '../../src/components/ui';
 import { useToast } from '../../src/components/Overlay';
@@ -22,8 +27,12 @@ export default function ScannerScreen() {
   const [torch, setTorch] = useState(false);
   const [scanned, setScanned] = useState(false);
 
+  // The laser sweeps up and down forever - driven by a shared value so the
+  // animation runs on the UI thread instead of restarting on every frame.
+  const laser = useSharedValue(0);
+  laser.value = withRepeat(withTiming(1, { duration: 2200 }), -1, false);
   const laserStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: withRepeat(withTiming(240, { duration: 2200 }), -1, false) }],
+    transform: [{ translateY: laser.value * 240 }],
   }));
 
   const onBarcode = async ({ data }: { data: string }) => {

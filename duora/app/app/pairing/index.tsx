@@ -236,7 +236,7 @@ export default function PairingScreen() {
                 { icon: QrCode, name: 'QR pairing', detail: 'Show or scan a code in person' },
                 {
                   icon: ShieldCheck,
-                  name: 'End-to-end private',
+                  name: 'Private by default',
                   detail: 'Only the two of you can read this space',
                 },
               ].map((row, index) => {

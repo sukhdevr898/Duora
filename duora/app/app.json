@@ -2,7 +2,7 @@
   "expo": {
     "name": "Duora",
     "slug": "duora",
-    "version": "1.0.0",
+    "version": "3.0.0",
     "scheme": "duora",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -25,7 +25,7 @@
     ],
     "android": {
       "package": "com.duora.app",
-      "versionCode": 1,
+      "versionCode": 3,
       "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-icon.png",

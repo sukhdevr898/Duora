@@ -52,6 +52,8 @@ export type ChatMessage = {
   id: string;
   clientMessageId: string;
   conversationId: string;
+  /** The id of the person who wrote it - used to tell "me" from "partner". */
+  senderId: string;
   from: 'me' | 'partner';
   text: string;
   sticker: string | null;

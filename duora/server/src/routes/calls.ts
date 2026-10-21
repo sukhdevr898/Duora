@@ -100,6 +100,61 @@ export async function startCall(
   };
 }
 
+/** Looks up one call and makes sure it belongs to this user. */
+export async function findCall(userId: string, callId: string): Promise<CallRow> {
+  const row = await db().one<CallRow>('SELECT * FROM call_sessions WHERE id = ?', [callId]);
+  if (!row) throw ApiError.notFound('Call not found');
+  if (row.caller_id !== userId && row.callee_id !== userId) {
+    throw ApiError.forbidden('That call is not yours');
+  }
+  return row;
+}
+
+/** The callee picked up — the call is now live. */
+export async function answerCall(userId: string, callId: string): Promise<CallLogItem> {
+  const row = await db().one<CallRow>('SELECT * FROM call_sessions WHERE id = ?', [callId]);
+  if (!row) throw ApiError.notFound('Call not found');
+  if (row.caller_id !== userId && row.callee_id !== userId) {
+    throw ApiError.forbidden('That call is not yours');
+  }
+  if (row.status === 'ENDED' || row.status === 'DECLINED' || row.status === 'MISSED') {
+    throw ApiError.badRequest('That call already finished');
+  }
+  const now = nowIso();
+  await db().run(
+    `UPDATE call_sessions
+        SET status = 'ACTIVE', started_at = COALESCE(started_at, ?), connected_at = COALESCE(connected_at, ?), updated_at = ?
+      WHERE id = ?`,
+    [now, now, now, callId],
+  );
+  const item = (await listCalls(userId, 50)).find((call) => call.id === callId);
+  if (!item) throw ApiError.notFound('Call not found');
+  return item;
+}
+
+/** The callee declined (or let it ring out). */
+export async function rejectCall(
+  userId: string,
+  callId: string,
+  outcome: 'DECLINED' | 'MISSED' = 'DECLINED',
+): Promise<CallLogItem> {
+  const row = await db().one<CallRow>('SELECT * FROM call_sessions WHERE id = ?', [callId]);
+  if (!row) throw ApiError.notFound('Call not found');
+  if (row.caller_id !== userId && row.callee_id !== userId) {
+    throw ApiError.forbidden('That call is not yours');
+  }
+  const now = nowIso();
+  await db().run(
+    `UPDATE call_sessions
+        SET status = ?, end_reason = ?, ended_at = COALESCE(ended_at, ?), updated_at = ?
+      WHERE id = ?`,
+    [outcome, outcome, now, now, callId],
+  );
+  const item = (await listCalls(userId, 50)).find((call) => call.id === callId);
+  if (!item) throw ApiError.notFound('Call not found');
+  return item;
+}
+
 export async function endCall(
   userId: string,
   callId: string,
@@ -170,6 +225,9 @@ const endSchema = z.object({
   outcome: z.enum(['ENDED', 'DECLINED', 'CANCELLED', 'MISSED', 'FAILED']).default('ENDED'),
 });
 const listSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
+const rejectSchema = z.object({
+  outcome: z.enum(['DECLINED', 'MISSED']).default('DECLINED'),
+});
 
 export const callsRouter = Router();
 callsRouter.use(requireAuth);
@@ -189,6 +247,22 @@ callsRouter.post(
   asyncHandler(async (req, res) => {
     const { kind } = req.body as { kind: 'voice' | 'video' };
     res.status(201).json({ call: await startCall(req.user!.id, kind) });
+  }),
+);
+
+callsRouter.post(
+  '/:callId/answer',
+  asyncHandler(async (req, res) => {
+    res.json({ call: await answerCall(req.user!.id, req.params.callId) });
+  }),
+);
+
+callsRouter.post(
+  '/:callId/reject',
+  validate(rejectSchema),
+  asyncHandler(async (req, res) => {
+    const { outcome } = req.body as { outcome: 'DECLINED' | 'MISSED' };
+    res.json({ call: await rejectCall(req.user!.id, req.params.callId, outcome) });
   }),
 );
 

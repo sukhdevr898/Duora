@@ -5,22 +5,32 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { ArrowRight, Eye, EyeOff, Heart, ServerCog } from 'lucide-react-native';
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Heart,
+  LockKeyhole,
+  Mail,
+  ServerCog,
+  UserRound,
+} from 'lucide-react-native';
 import { HeartOrb, WelcomeWaves } from '../src/components/Brand';
 import { LogoLockup } from '../src/components/BrandWordmark';
-import { Btn, PressableScale } from '../src/components/ui';
+import { Btn, PressableScale, Segmented } from '../src/components/ui';
+import { Field, FieldAction } from '../src/components/Field';
 import { Sheet } from '../src/components/Overlay';
-import { ErrorCard, InlineNote, StatusPill } from '../src/components/Feedback';
+import { ErrorCard, InlineNote, StatusPill, SuccessCard } from '../src/components/Feedback';
 import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { fonts } from '../src/theme/fonts';
 import { ABSOLUTE_FILL } from '../src/theme/tokens';
+import { useToast } from '../src/components/Overlay';
 import { useStore } from '../src/state/store';
 import { describeBaseUrl } from '../src/api/client';
 
@@ -33,6 +43,7 @@ export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, mode } = useDuoraTheme();
+  const { toast } = useToast();
   const authStatus = useStore((s) => s.authStatus);
   const authBusy = useStore((s) => s.authBusy);
   const authError = useStore((s) => s.authError);
@@ -50,6 +61,7 @@ export default function WelcomeScreen() {
   const [reveal, setReveal] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [touched, setTouched] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
 
   const dark = mode === 'dark';
 
@@ -105,8 +117,13 @@ export default function WelcomeScreen() {
         ? await login(email.trim(), password)
         : await register(email.trim(), password, name.trim());
     if (ok) {
-      setAuthOpen(false);
+      setSignedIn(true);
+      toast(
+        mode_ === 'login' ? 'Welcome back — you are home' : 'Your space is ready',
+        'success',
+      );
       setPassword('');
+      setAuthOpen(false);
     }
   };
 
@@ -120,8 +137,7 @@ export default function WelcomeScreen() {
 
   if (authStatus === 'authenticated') return null;
 
-  const showFieldError = (key: keyof FieldErrors) =>
-    touched ? fieldErrors[key] : undefined;
+  const showFieldError = (key: keyof FieldErrors) => (touched ? fieldErrors[key] : undefined);
 
   return (
     <View style={styles.root}>
@@ -228,14 +244,31 @@ export default function WelcomeScreen() {
         subtitle="Your account keeps the two of you connected."
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 8 }}
+          >
+            <Segmented
+              options={[
+                { key: 'login', label: 'Sign in' },
+                { key: 'register', label: 'Create account' },
+              ]}
+              value={mode_}
+              onChange={(key) => openAuth(key as 'login' | 'register')}
+              style={styles.segmented}
+            />
+
             <View style={styles.statusRow}>
-              <StatusPill
-                status={serverStatus}
-                label={statusLabel}
-                onPress={() => void checkServer()}
-              />
+              <StatusPill status={serverStatus} label={statusLabel} onPress={() => void checkServer()} />
             </View>
+
+            {signedIn ? (
+              <SuccessCard
+                title="You are in"
+                text="Your private space is open."
+              />
+            ) : null}
 
             {authError ? (
               <ErrorCard
@@ -263,102 +296,61 @@ export default function WelcomeScreen() {
             ) : null}
 
             {mode_ === 'register' ? (
-              <View style={styles.field}>
-                <TextInput
-                  value={name}
-                  onChangeText={(v) => {
-                    setName(v);
-                    if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
-                  }}
-                  placeholder="Your name"
-                  placeholderTextColor={t.text3}
-                  autoCapitalize="words"
-                  editable={!authBusy}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: t.fieldBg,
-                      color: t.text,
-                      borderColor: showFieldError('name') ? t.danger : t.line,
-                    },
-                  ]}
-                  accessibilityLabel="Your name"
-                />
-                {showFieldError('name') ? (
-                  <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.name}</Text>
-                ) : null}
-              </View>
+              <Field
+                icon={UserRound}
+                label="Your name"
+                value={name}
+                onChangeText={(v) => {
+                  setName(v);
+                  if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
+                }}
+                error={showFieldError('name')}
+                editable={!authBusy}
+                autoCapitalize="words"
+              />
             ) : null}
 
-            <View style={styles.field}>
-              <TextInput
-                value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
-                }}
-                placeholder="Email"
-                placeholderTextColor={t.text3}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                editable={!authBusy}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: t.fieldBg,
-                    color: t.text,
-                    borderColor: showFieldError('email') ? t.danger : t.line,
-                  },
-                ]}
-                accessibilityLabel="Email"
-              />
-              {showFieldError('email') ? (
-                <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.email}</Text>
-              ) : null}
-            </View>
+            <Field
+              icon={Mail}
+              label="Email"
+              value={email}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+              }}
+              error={showFieldError('email')}
+              editable={!authBusy}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+            />
 
-            <View style={styles.field}>
-              <View
-                style={[
-                  styles.passwordWrap,
-                  {
-                    backgroundColor: t.fieldBg,
-                    borderColor: showFieldError('password') ? t.danger : t.line,
-                  },
-                ]}
-              >
-                <TextInput
-                  value={password}
-                  onChangeText={(v) => {
-                    setPassword(v);
-                    if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
-                  }}
-                  placeholder="Password"
-                  placeholderTextColor={t.text3}
-                  secureTextEntry={!reveal}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!authBusy}
-                  style={[styles.input, styles.passwordInput, { color: t.text }]}
-                  accessibilityLabel="Password"
-                />
-                <PressableScale
-                  onPress={() => setReveal((v) => !v)}
-                  accessibilityLabel={reveal ? 'Hide password' : 'Show password'}
-                  style={styles.reveal}
-                >
+            <Field
+              icon={LockKeyhole}
+              label="Password"
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+              }}
+              error={showFieldError('password')}
+              hint={mode_ === 'register' ? 'At least 8 characters' : undefined}
+              editable={!authBusy}
+              secureTextEntry={!reveal}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              right={
+                <FieldAction onPress={() => setReveal((v) => !v)} label={reveal ? 'Hide password' : 'Show password'}>
                   {reveal ? (
                     <EyeOff size={17} strokeWidth={2.2} color={t.text3} />
                   ) : (
                     <Eye size={17} strokeWidth={2.2} color={t.text3} />
                   )}
-                </PressableScale>
-              </View>
-              {showFieldError('password') ? (
-                <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.password}</Text>
-              ) : null}
-            </View>
+                </FieldAction>
+              }
+            />
 
             <Btn
               label={
@@ -374,15 +366,6 @@ export default function WelcomeScreen() {
               loading={authBusy}
               block
             />
-
-            <PressableScale
-              onPress={() => openAuth(mode_ === 'login' ? 'register' : 'login')}
-              accessibilityLabel="Switch mode"
-            >
-              <Text style={[styles.switch, { color: t.text2 }]}>
-                {mode_ === 'login' ? 'New here? Create an account' : 'Already have a space? Sign in'}
-              </Text>
-            </PressableScale>
 
             <InlineNote
               text={`Demo account · ${DEMO_EMAIL} / ${DEMO_PASSWORD}`}
@@ -456,26 +439,8 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   offlineText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
-  statusRow: { flexDirection: 'row', marginBottom: 14 },
-  field: { marginBottom: 10 },
-  input: {
-    height: 50,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  passwordWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingRight: 6,
-  },
-  passwordInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent' },
-  reveal: { padding: 10 },
-  fieldError: { fontSize: 11.5, fontWeight: '600', marginTop: 5, marginLeft: 4 },
-  switch: { textAlign: 'center', fontSize: 13, fontWeight: '600', marginTop: 14 },
+  segmented: { marginBottom: 16 },
+  statusRow: { flexDirection: 'row', marginBottom: 16 },
   serverLink: {
     flexDirection: 'row',
     alignItems: 'center',
