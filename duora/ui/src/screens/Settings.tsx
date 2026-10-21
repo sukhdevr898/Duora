@@ -5,14 +5,18 @@ import {
   Globe2,
   Heart,
   Info,
+  Languages,
   LifeBuoy,
+  Link2,
   Lock,
   MessageSquare,
   MessageSquareText,
   Moon,
   Palette,
   Phone,
+  Server,
   Sparkles,
+  Sun,
   User,
   Video,
 } from 'lucide-react';
@@ -23,6 +27,7 @@ import { Sheet, useToast } from '../components/Overlay';
 import { RichText } from '../components/RichText';
 import { me, partner } from '../data/mock';
 import { useRouter } from '../nav/router';
+import { useApp } from '../state/app';
 
 type Row = {
   key: string;
@@ -39,34 +44,66 @@ const accountRows: Row[] = [
   { key: 'privacy', label: 'Privacy & Security', icon: Lock },
 ];
 
-const appRows: Row[] = [
-  { key: 'appearance', label: 'Appearance', icon: Palette },
-  { key: 'language', label: 'Language', icon: Globe2, value: 'English' },
-  { key: 'help', label: 'Help & Support', icon: LifeBuoy },
-  { key: 'about', label: 'About Duora', icon: Info, value: 'v1.0.0' },
-];
-
 export function Settings() {
   const { navigate } = useRouter();
   const { toast } = useToast();
+  const {
+    mode,
+    setMode,
+    resolvedMode,
+    accentInfo,
+    server,
+    pairing,
+  } = useApp();
   const [notifications, setNotifications] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
+  const appRows: Row[] = [
+    { key: 'appearance', label: 'Appearance & theme', icon: Palette, value: accentInfo.name },
+    { key: 'server', label: 'Server health', icon: Server, value: server.status === 'online' ? 'Connected' : server.status === 'connecting' ? 'Reconnecting' : 'Offline' },
+    {
+      key: 'pairing',
+      label: 'Pairing & connection',
+      icon: Link2,
+      value: pairing.phase === 'matched' ? 'Matched' : 'Not paired',
+    },
+    { key: 'language', label: 'Language', icon: Globe2, value: 'English' },
+    { key: 'help', label: 'Help & Support', icon: LifeBuoy },
+    { key: 'about', label: 'About Duora', icon: Info, value: 'v1.0.0' },
+  ];
+
   const onRow = (row: Row) => {
     if (row.key === 'appearance') navigate({ name: 'appearance' });
+    else if (row.key === 'server') navigate({ name: 'server' });
+    else if (row.key === 'pairing') navigate({ name: 'pairing' });
     else if (row.key === 'about') setAboutOpen(true);
-    else toast(`${row.label} — coming soon`);
+    else if (row.key === 'language') navigate({ name: 'sub-settings', section: 'language' });
+    else if (row.key === 'help') navigate({ name: 'sub-settings', section: 'help' });
+    else if (row.key === 'chat') navigate({ name: 'sub-settings', section: 'chat-settings' });
+    else navigate({ name: 'sub-settings', section: row.key });
   };
 
   const renderRow = (row: Row) => {
     const Icon = row.icon;
+    const isServer = row.key === 'server';
     return (
       <button key={row.key} type="button" className="settings-row" onClick={() => onRow(row)}>
         <span className="settings-row__icon">
           <Icon size={16} strokeWidth={2.1} />
         </span>
         <span className="settings-row__label">{row.label}</span>
+        {isServer ? (
+          <span
+            className={`connect-pill ${server.status}`}
+            style={{ height: 24, paddingInline: 9, fontSize: 10 }}
+          >
+            <span className="connect-pill__dot" />
+            {row.value}
+          </span>
+        ) : (
+          row.value && <span className="settings-row__value">{row.value}</span>
+        )}
         {row.toggle ? (
           <span
             role="switch"
@@ -79,10 +116,7 @@ export function Settings() {
             }}
           />
         ) : (
-          <>
-            {row.value && <span className="settings-row__value">{row.value}</span>}
-            <ChevronRight className="settings-row__chev" size={17} strokeWidth={2.2} />
-          </>
+          <ChevronRight className="settings-row__chev" size={17} strokeWidth={2.2} />
         )}
       </button>
     );
@@ -94,6 +128,10 @@ export function Settings() {
       <div className="screen-body">
         <div className="appbar" style={{ paddingBottom: 10 }}>
           <span className="appbar__title">Settings</span>
+          <span className="appbar__spacer" />
+          <span className="badge-premium">
+            <Sparkles size={10} strokeWidth={2.6} /> Premium
+          </span>
         </div>
 
         <div className="screen-scroll">
@@ -107,21 +145,24 @@ export function Settings() {
               onClick={() => setProfileOpen(true)}
               style={{ width: '100%', textAlign: 'left' }}
             >
-              <Avatar src={partner.photo} size={50} online alt={partner.fullName} />
+              <Avatar src={partner.photo} size={50} ring online alt={partner.fullName} />
               <span className="grow">
                 <span
                   style={{
-                    display: 'block',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
                     fontSize: 16.5,
                     fontWeight: 800,
                     letterSpacing: '-0.3px',
                   }}
                 >
                   {partner.name}
+                  <Heart size={12} fill="var(--primary-2)" strokeWidth={0} />
                 </span>
                 <span className="online-row" style={{ marginTop: 2 }}>
                   <span className="online-dot" />
-                  Online
+                  Online · {accentInfo.name}
                 </span>
               </span>
               <span className="partner-card__go">
@@ -129,14 +170,27 @@ export function Settings() {
               </span>
             </motion.button>
 
-            <div className="settings-group">{accountRows.map(renderRow)}</div>
-            <div className="settings-group">{appRows.map(renderRow)}</div>
+            <div className="settings-group">{accountRows.slice(0, 1).map(renderRow)}</div>
+            <div className="settings-group">{accountRows.slice(1).map(renderRow)}</div>
+
+            <div className="section-head" style={{ padding: '20px 2px 8px' }}>
+              <span className="section-head__title" style={{ fontSize: 13.5 }}>
+                App &amp; connection
+              </span>
+            </div>
+            <div className="settings-group" style={{ marginTop: 0 }}>
+              {appRows.map(renderRow)}
+            </div>
 
             <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
               <button
                 type="button"
                 className="press"
-                onClick={() => toast('Premium unlocked — enjoy!')}
+                onClick={() => {
+                  const next = resolvedMode === 'dark' ? 'light' : 'dark';
+                  setMode(next);
+                  toast(`${next === 'dark' ? 'Dark' : 'Light'} mode on`);
+                }}
                 style={{
                   flex: 1,
                   display: 'flex',
@@ -145,14 +199,22 @@ export function Settings() {
                   gap: 7,
                   height: 46,
                   borderRadius: 16,
-                  background: 'linear-gradient(135deg, #2b2140, #1a1330)',
+                  background:
+                    resolvedMode === 'dark'
+                      ? 'linear-gradient(135deg, #2a2247, #1c1733)'
+                      : 'linear-gradient(135deg, #2b2140, #1a1330)',
                   color: '#f4eeff',
                   fontSize: 12,
                   fontWeight: 700,
                   boxShadow: '0 12px 24px rgba(27, 19, 48, 0.28)',
                 }}
               >
-                <Moon size={14} strokeWidth={2.2} /> Dark mode
+                {resolvedMode === 'dark' ? (
+                  <Sun size={14} strokeWidth={2.2} />
+                ) : (
+                  <Moon size={14} strokeWidth={2.2} />
+                )}
+                {resolvedMode === 'dark' ? 'Light mode' : 'Dark mode'}
               </button>
               <button
                 type="button"
@@ -166,14 +228,14 @@ export function Settings() {
                   gap: 7,
                   height: 46,
                   borderRadius: 16,
-                  background: 'linear-gradient(135deg, #efe7ff, #f9e9ff)',
-                  color: '#5b39ee',
+                  background: 'var(--primary-soft)',
+                  color: 'var(--primary-deep)',
                   fontSize: 12,
                   fontWeight: 700,
-                  border: '1px solid rgba(109,75,246,0.12)',
+                  border: '1px solid var(--primary-ghost)',
                 }}
               >
-                <Sparkles size={14} strokeWidth={2.2} /> Customize
+                <Languages size={14} strokeWidth={2.2} /> Love theme
               </button>
             </div>
 
@@ -236,11 +298,21 @@ export function Settings() {
               <Video size={19} strokeWidth={2.2} />
             </button>
           </div>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setProfileOpen(false);
+              navigate({ name: 'pairing' });
+            }}
+          >
+            <Link2 size={12} strokeWidth={2.4} /> Manage pairing
+          </button>
           <div
             className="row"
-            style={{ gap: 8, marginTop: 6, color: 'var(--text-3)', fontSize: 11, fontWeight: 600 }}
+            style={{ gap: 8, marginTop: 2, color: 'var(--text-3)', fontSize: 11, fontWeight: 600 }}
           >
-            <Heart size={12} fill="currentColor" strokeWidth={0} color="#c4a6ff" />
+            <Heart size={12} fill="currentColor" strokeWidth={0} color="var(--primary-2)" />
             Matched on Duora · 14 Feb 2024
           </div>
         </div>
@@ -260,7 +332,13 @@ export function Settings() {
             </div>
             <div className="settings-row">
               <span className="settings-row__label">Design</span>
-              <span className="settings-row__value">Soft violet · premium</span>
+              <span className="settings-row__value">{accentInfo.name}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row__label">Mode</span>
+              <span className="settings-row__value">
+                {mode === 'system' ? `System · ${resolvedMode}` : mode}
+              </span>
             </div>
             <div className="settings-row">
               <span className="settings-row__label">Made for</span>

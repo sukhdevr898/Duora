@@ -10,7 +10,11 @@ export type Route =
   | { name: 'conversation' }
   | { name: 'audio-call' }
   | { name: 'video-call' }
-  | { name: 'appearance' };
+  | { name: 'appearance' }
+  | { name: 'server' }
+  | { name: 'pairing' }
+  | { name: 'scanner' }
+  | { name: 'sub-settings'; section: string };
 
 const TAB_ROUTES: Route['name'][] = ['home', 'chat', 'calls', 'notes', 'settings'];
 
@@ -43,8 +47,9 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   const switchTab = useCallback((name: (typeof TAB_ROUTES)[number]) => {
     setDirection(1);
     setStack((prev) => {
-      const base = TAB_ROUTES.includes(prev[0].name) ? prev[0] : { name: 'home' as const };
-      return [base, { name }];
+      const base: Route = TAB_ROUTES.includes(prev[0].name) ? prev[0] : { name: 'home' };
+      const next = { name } as Route;
+      return [base, next];
     });
   }, []);
 

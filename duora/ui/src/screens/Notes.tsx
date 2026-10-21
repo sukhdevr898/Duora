@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { CalendarDays, Heart, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { CalendarDays, Heart, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { ConnectionPill } from '../components/ConnectionPill';
 import { useState } from 'react';
 import { BottomNav } from '../components/BottomNav';
 import { Sheet, useToast } from '../components/Overlay';
@@ -16,6 +17,9 @@ export function Notes() {
   const { navigate } = useRouter();
   const [notes, setNotes] = useState<Note[]>(seed);
   const [active, setActive] = useState<Note | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<'All' | 'Plans' | 'Days'>('All');
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -51,6 +55,19 @@ export function Notes() {
         <div className="appbar" style={{ paddingBottom: 10 }}>
           <span className="appbar__title">Notes</span>
           <span className="appbar__spacer" />
+          <ConnectionPill compact />
+          <button
+            type="button"
+            className={`icon-btn ${searching ? 'soft' : 'ghost'} press`}
+            style={{ marginRight: 8 }}
+            onClick={() => {
+              setSearching((v) => !v);
+              setQuery('');
+            }}
+            aria-label={searching ? 'Close search' : 'Search notes'}
+          >
+            {searching ? <X size={18} strokeWidth={2.2} /> : <Search size={18} strokeWidth={2.2} />}
+          </button>
           <button
             type="button"
             className="fab-add"
@@ -62,8 +79,51 @@ export function Notes() {
         </div>
 
         <div className="screen-scroll">
+          {searching && (
+            <div style={{ padding: '0 18px 12px' }}>
+              <div className="searchbar">
+                <Search size={16} strokeWidth={2.2} />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search memories…"
+                  aria-label="Search notes"
+                />
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, padding: '0 18px 12px' }}>
+            {(['All', 'Plans', 'Days'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`chip ${category === c ? 'active' : ''}`}
+                onClick={() => setCategory(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
           <div style={{ padding: '0 18px 24px' }} className="stack gap-10">
-            {notes.map((note, i) => (
+            {notes
+              .filter((n) => {
+                const matchCategory =
+                  category === 'All'
+                    ? true
+                    : category === 'Plans'
+                      ? n.title.toLowerCase().includes('future') ||
+                        n.title.toLowerCase().includes('plan')
+                      : n.title.toLowerCase().includes('special') ||
+                        n.title.toLowerCase().includes('first') ||
+                        n.title.toLowerCase().includes('love');
+                const matchQuery =
+                  !query.trim() ||
+                  n.title.toLowerCase().includes(query.toLowerCase()) ||
+                  n.lines.join(' ').toLowerCase().includes(query.toLowerCase());
+                return matchCategory && matchQuery;
+              })
+              .map((note, i) => (
               <motion.button
                 key={note.id}
                 type="button"
@@ -102,11 +162,11 @@ export function Notes() {
                 gap: 8,
                 height: 48,
                 borderRadius: 18,
-                border: '1.5px dashed rgba(109, 75, 246, 0.28)',
+                border: '1.5px dashed var(--primary-ghost)',
                 color: 'var(--primary)',
                 fontSize: 12.5,
                 fontWeight: 700,
-                background: 'rgba(255,255,255,0.5)',
+                background: 'var(--primary-ghost)',
               }}
             >
               <Sparkles size={15} strokeWidth={2.2} />
