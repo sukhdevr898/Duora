@@ -1,76 +1,43 @@
 import { Router } from 'express';
-import { requireAuth } from '../../middleware/auth.middleware';
-import { validate } from '../../middleware/validate.middleware';
-import { callLimiter } from '../../middleware/rateLimit.middleware';
+import { z } from 'zod';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { callIdParamSchema, initiateCallSchema } from './calls.schema';
-import * as callsService from './calls.service';
+import { requireAuth } from '../../middleware/auth.middleware';
+import { validate, validatedQuery } from '../../middleware/validate.middleware';
+import * as calls from './calls.service';
 
-const router = Router();
+const startSchema = z.object({ kind: z.enum(['voice', 'video']).default('voice') });
+const endSchema = z.object({
+  outcome: z.enum(['ENDED', 'DECLINED', 'CANCELLED', 'MISSED', 'FAILED']).default('ENDED'),
+});
+const listSchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
 
-router.post(
-  '/calls',
-  requireAuth,
-  callLimiter,
-  validate({ body: initiateCallSchema }),
+export const callsRouter = Router();
+callsRouter.use(requireAuth);
+
+callsRouter.get(
+  '/',
+  validate(listSchema, 'query'),
   asyncHandler(async (req, res) => {
-    const result = await callsService.initiateCall(req.user!.id, req.body.callType);
-    res.status(201).json(result);
+    const limit = validatedQuery<{ limit: number }>(req)?.limit ?? 50;
+    res.json({ calls: await calls.listCalls(req.user!.id, limit) });
   }),
 );
 
-router.get(
-  '/calls/active',
-  requireAuth,
+callsRouter.post(
+  '/',
+  validate(startSchema),
   asyncHandler(async (req, res) => {
-    res.json({ call: await callsService.getActiveCall(req.user!.id) });
+    const { kind } = req.body as { kind: 'voice' | 'video' };
+    res.status(201).json({ call: await calls.startCall(req.user!.id, kind) });
   }),
 );
 
-router.get(
-  '/calls/:callId/ice',
-  requireAuth,
-  validate({ params: callIdParamSchema }),
+callsRouter.post(
+  '/:callId/end',
+  validate(endSchema),
   asyncHandler(async (req, res) => {
-    res.json(await callsService.getIceForCall(req.params.callId, req.user!.id));
+    const { outcome } = req.body as { outcome: 'ENDED' | 'DECLINED' | 'CANCELLED' | 'MISSED' | 'FAILED' };
+    await calls.endCall(req.user!.id, req.params.callId, outcome);
+    res.json({ ok: true });
   }),
 );
-
-router.post(
-  '/calls/:callId/accept',
-  requireAuth,
-  callLimiter,
-  validate({ params: callIdParamSchema }),
-  asyncHandler(async (req, res) => {
-    res.json({ call: await callsService.acceptCall(req.params.callId, req.user!.id) });
-  }),
-);
-
-router.post(
-  '/calls/:callId/decline',
-  requireAuth,
-  validate({ params: callIdParamSchema }),
-  asyncHandler(async (req, res) => {
-    res.json({ call: await callsService.declineCall(req.params.callId, req.user!.id) });
-  }),
-);
-
-router.post(
-  '/calls/:callId/cancel',
-  requireAuth,
-  validate({ params: callIdParamSchema }),
-  asyncHandler(async (req, res) => {
-    res.json({ call: await callsService.cancelCall(req.params.callId, req.user!.id) });
-  }),
-);
-
-router.post(
-  '/calls/:callId/end',
-  requireAuth,
-  validate({ params: callIdParamSchema }),
-  asyncHandler(async (req, res) => {
-    res.json({ call: await callsService.endCall(req.params.callId, req.user!.id) });
-  }),
-);
-
-export default router;

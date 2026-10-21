@@ -1,31 +1,44 @@
-// Canonical socket event names shared by client and server.
-export const SocketEvents = {
-  // Chat — client to server
-  MESSAGE_SEND: 'message_send',
-  TYPING_START: 'typing_start',
-  TYPING_STOP: 'typing_stop',
-  MESSAGE_READ: 'message_read',
-  MESSAGE_DELIVERED: 'message_delivered',
-  // Chat — server to client
-  MESSAGE_ACK: 'message_ack',
-  MESSAGE_NEW: 'message_new',
-  // Pairing — server to client
-  PAIRING_UPDATE: 'pairing_update',
-  // Calls — client to server
-  CALL_INVITE: 'call_invite',
-  CALL_RINGING: 'call_ringing',
-  CALL_ACCEPT: 'call_accept',
-  CALL_DECLINE: 'call_decline',
-  CALL_CANCEL: 'call_cancel',
-  CALL_END: 'call_end',
-  CALL_STATE: 'call_state',
-  WEBRTC_OFFER: 'webrtc_offer',
-  WEBRTC_ANSWER: 'webrtc_answer',
-  WEBRTC_ICE_CANDIDATE: 'webrtc_ice_candidate',
-  // Calls — server to client
-  CALL_ERROR: 'call_error',
-  // Presence
-  PRESENCE_UPDATE: 'presence_update',
+/** Socket.IO event names shared with the mobile client. */
+export const EVENTS = {
+  // client → server
+  PRESENCE_PING: 'presence:ping',
+  MESSAGE_SEND: 'message:send',
+  MESSAGE_READ: 'message:read',
+  TYPING: 'typing:start',
+  PAIR_ACCEPT: 'pairing:accept',
+  CALL_INVITE: 'call:invite',
+  CALL_END: 'call:end',
+
+  // server → client
+  PRESENCE_UPDATE: 'presence:update',
+  MESSAGE_NEW: 'message:new',
+  MESSAGE_STATUS: 'message:status',
+  TYPING_UPDATE: 'typing:update',
+  PAIR_REQUEST: 'pairing:request',
+  PAIR_MATCHED: 'pairing:matched',
+  CALL_INCOMING: 'call:incoming',
+  CALL_ENDED: 'call:ended',
+  SERVER_HELLO: 'server:hello',
 } as const;
 
-export type SocketEventName = (typeof SocketEvents)[keyof typeof SocketEvents];
+export type ServerToClientEvents = {
+  [EVENTS.PRESENCE_UPDATE]: (payload: { userId: string; online: boolean; lastSeenAt: string }) => void;
+  [EVENTS.MESSAGE_NEW]: (payload: unknown) => void;
+  [EVENTS.MESSAGE_STATUS]: (payload: { messageId: string; status: string }) => void;
+  [EVENTS.TYPING_UPDATE]: (payload: { conversationId: string; userId: string; typing: boolean }) => void;
+  [EVENTS.PAIR_REQUEST]: (payload: { fromUserId: string; code: string }) => void;
+  [EVENTS.PAIR_MATCHED]: (payload: { partnerId: string; conversationId: string | null }) => void;
+  [EVENTS.CALL_INCOMING]: (payload: { callId: string; fromUserId: string; kind: 'voice' | 'video' }) => void;
+  [EVENTS.CALL_ENDED]: (payload: { callId: string; reason: string }) => void;
+  [EVENTS.SERVER_HELLO]: (payload: { userId: string; serverTime: string; version: string }) => void;
+};
+
+export type ClientToServerEvents = {
+  [EVENTS.PRESENCE_PING]: () => void;
+  [EVENTS.MESSAGE_SEND]: (payload: { conversationId: string; clientMessageId: string; text: string; sticker?: string | null }) => void;
+  [EVENTS.MESSAGE_READ]: (payload: { conversationId: string }) => void;
+  [EVENTS.TYPING]: (payload: { conversationId: string; typing: boolean }) => void;
+  [EVENTS.PAIR_ACCEPT]: (payload: { code: string }) => void;
+  [EVENTS.CALL_INVITE]: (payload: { kind: 'voice' | 'video' }) => void;
+  [EVENTS.CALL_END]: (payload: { callId: string; reason?: string }) => void;
+};

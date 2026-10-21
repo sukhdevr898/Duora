@@ -1,35 +1,28 @@
 {
   "name": "duora-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Duora backend — Express + Socket.IO + Prisma/PostgreSQL",
-  "main": "dist/server.js",
+  "description": "Duora backend \u2014 Express + Socket.IO + SQLite/Postgres. Two people, one app.",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "npm run prisma:generate && tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "typecheck": "tsc -p tsconfig.test.json",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "prisma:validate": "prisma validate",
-    "db:seed": "tsx prisma/seed.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "tsx src/db/migrate.ts",
+    "seed": "tsx src/seed.ts",
+    "db:reset": "tsx src/db/migrate.ts --reset && tsx src/seed.ts",
+    "start:prod": "node dist/index.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
     "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
-    "firebase-admin": "^12.7.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "socket.io": "^4.8.4",
@@ -37,17 +30,14 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^20.17.12",
-    "@types/supertest": "^6.0.2",
-    "pino-pretty": "^13.2.0",
-    "prisma": "^6.2.1",
-    "supertest": "^7.0.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "typescript": "^5.7.3"
   },
   "engines": {
     "node": "22.x"

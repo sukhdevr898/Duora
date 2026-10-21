@@ -1,89 +1,103 @@
 # Duora — _Two hearts. One private space._
 
-Private 2-person communication: Expo Android app + lightweight Node server. Built for **personal use** — minimal server load, runs happily on **Render free tier**.
+A private, two-person space: an **Expo (React Native) app** talking to a **Node.js API** —
+no dummy data anywhere. The mobile app is a 1:1 port of the premium React UI that lives in
+[`ui/`](./ui) (same layout, typography, icons, themes and motion), and every screen is
+backed by the real database.
 
-> ✅ One-click deploy: [`render.yaml`](../render.yaml) (server + Postgres, free tier) → see [Deployment guide](docs/deployment.md#0-quickest-path-render-blueprint-recommended).
+> Deploy the backend with one click: [`render.yaml`](../render.yaml) → Render **New → Blueprint → Apply**.
 
 ## Repository layout
 
 ```
 duora/
-├── app/      Expo SDK 57 · RN 0.86 · TypeScript strict · Expo Router
-├── ui/       Front-end-only premium React UI (Vite + TS) — design preview of every screen
-├── server/   Express + Socket.IO + Prisma/PostgreSQL (lightweight, ~120MB Alpine image)
-├── docs/     architecture, API, WebSocket, deployment (incl. Render)
-└── render.yaml  Blueprint for one-click Render deploy
+├── app/      Expo SDK 57 · RN 0.86 · expo-router · TypeScript strict  ← the mobile app
+├── server/   Express 4 + Socket.IO + JWT + zod + SQLite/Postgres        ← the API
+├── ui/       Premium React UI (Vite) — the design reference the app mirrors
+├── docs/     architecture, API, WebSocket, deployment notes
+└── render.yaml   Blueprint: web service (Docker) + managed PostgreSQL
 ```
 
 ## Start locally (under 5 minutes)
 
-```bash
-# 1. Backend
-cd duora/server
-cp .env.example .env            # only DATABASE_URL + 2 JWT secrets needed
-npm install
-npx prisma migrate dev
-npm run db:seed                 # optional: alice@duora.dev / bob@duora.dev Password123!
-npm run dev                     # http://localhost:4000  (health: /health, ready: /ready)
+### 1. Backend
 
-# 2. App (second terminal)
-cd duora/app
-cp .env.example .env            # 10.0.2.2 → emulator host
+```bash
+cd duora/server
+cp .env.example .env          # DATABASE_URL + 2 JWT secrets are enough
 npm install
-npx expo start                  # Expo Go — all except native calls works
+npm run seed                  # demo couple: sukhdev@duora.app / love1234
+npm run dev                   # http://localhost:4000  (health: /health)
 ```
 
-Physical device → LAN IP (`192.168.1.x`), Render → `https://*.onrender.com`. Native calling needs a development build — see [`docs/android-build.md`](docs/android-build.md).
+The server runs on **SQLite** by default (`file:./data/duora.db`) and switches to
+**Postgres** automatically when `DATABASE_URL` starts with `postgres://`.
+The schema is applied on boot, so there is no separate migration command.
 
-### Deploy to Render (personal use, free)
+### 2. App
 
-1. Push to GitHub → Render **New → Blueprint → Apply** (reads `render.yaml`)
-2. Set `PUBLIC_BASE_URL` to your Render URL in Dashboard → save → redeploy
-3. App: `EXPO_PUBLIC_API_BASE_URL="https://<your-service>.onrender.com/api/v1"` → restart expo
+```bash
+cd duora/app
+npm install
+EXPO_PUBLIC_API_URL=http://localhost:4000 npx expo start
+```
 
-Free tier sleeps after 15 min idle (~30s wake); app shows “Reconnecting”.
+- Android emulator → `http://10.0.2.2:4000`
+- Physical device → your LAN IP (`http://192.168.x.x:4000`)
+- Render → `https://<your-service>.onrender.com`
 
-Full guide: [`docs/deployment.md`](docs/deployment.md).
+Sign in with the seeded account **sukhdev@duora.app / love1234** (partner: **ruhi@duora.app / love1234**).
 
-## What works where
+## Deploy to Render (personal use, free)
 
-### Expo Go (personal features, lightweight)
+1. Push to GitHub → Render **New → Blueprint → Apply** (reads [`render.yaml`](../render.yaml)).
+2. The blueprint builds [`duora/server/Dockerfile`](./server/Dockerfile), creates a managed
+   PostgreSQL and wires `DATABASE_URL` automatically.
+3. Point the app at it: `EXPO_PUBLIC_API_URL=https://duora-server.onrender.com`.
 
-Onboarding · auth (register/login/refresh/logout) · SecureStore · pairing (code invite with countdown + QR gen/scan with confirmation) · real-time chat (optimistic send, delivered/read, typing, reply/copy/delete, cursor pagination 40) · SQLite offline outbox with jittered backoff · partner dashboard with real presence · partner note · memories · settings (theme/notifications/privacy) · server settings/diagnostics · update check.
+The free tier sleeps after 15 minutes idle (~30 s wake-up). The app shows
+“Reconnecting” while the server wakes — the `ConnectionPill` and the Server-health
+screen reflect the live state.
 
-All tuned for low server load: pagination + watermark sync, throttled typing (2.5s), no polling loops, 5-min cleanup job.
+## What the app does
 
-### Development build (native calling)
+| Area | Screen | Backed by |
+|---|---|---|
+| Home | partner hero, streak, action tiles, quote, moments, anniversary, love stats | `GET /api/v1/home` |
+| Chat | conversations, search, specials, full conversation with stickers, reactions, receipts | `/api/v1/chat/*` + Socket.IO |
+| Notes | memory grid, filters, create/detail sheets | `/api/v1/notes` |
+| Calls | call hero, weekly stats, filters, call history, start/end calls | `/api/v1/calls` |
+| Settings | profile, sections, appearance, server health, pairing, sign out | `/api/v1/settings`, `/api/v1/users/me` |
+| Pairing | 6-character code, QR show, camera scan, matched celebration | `/api/v1/pairing/*` |
 
-WebRTC audio/video (`RTCView`), mute/speaker/Bluetooth, camera flip/toggle, call state machine (calling→ringing→connecting→connected→reconnecting/ended), ICE restart, foreground service (`microphone|camera|connectedDevice`), full-screen incoming intent, PiP with config-change survival, FCM high-priority push.
+Themes follow the system or an explicit choice (light / dark / system), with the four
+love accents (violet, rose, sunset, mint) and the rose **love mode** — exactly like the
+web UI, persisted locally and synced to the server so both devices agree.
 
-See [`docs/expo-go-limitations.md`](docs/expo-go-limitations.md) for honest classification — Expo Go shows an upgrade panel, never fake media.
+## Scripts
 
-### Requires infrastructure (optional for personal use)
+```bash
+npm run dev:server      # API with watch mode
+npm run build:server    # tsc + copy the SQL schema into dist/
+npm run seed:server     # reseed the demo couple
+npm run dev:app         # Expo dev server
+npm run export:web      # static web build of the app (used for visual QA)
+npm run typecheck:app   # tsc --noEmit for the app
+npm run typecheck:server
+```
 
-| Need | When |
-|---|---|
-| PostgreSQL | Always (local Docker or Render free DB via blueprint) |
-| HTTPS/WSS | On Render automatic; locally HTTP OK |
-| FCM | **Optional** — without it chat/calls work while apps open; only background alerts need it |
-| TURN | **Optional** — STUN default handles home Wi-Fi; enable only for strict mobile NATs |
-| SMTP | Optional for password-reset email |
+## Security notes
 
-## Lightweight personal tuning
-
-- **Server:** Alpine image (~120MB), 5-min cleanup, 25s socket heartbeat, `LOG_LEVEL=warn` on Render, attachments/TURN off by default, no Redis, single Prisma client.
-- **App:** 40-msg pages, watermark reconcile, exponential backoff with jitter, no aggressive polling, SecureStore for secrets, SQLite for offline.
-- **Cost:** free tier fits 2-person chat easily; TURN bandwidth is the only variable cost if you add coturn.
-
-## Security (personal)
-
-- bcrypt cost 12, short-lived JWT (15m) + rotated opaque refresh (SHA-256, revocable)
-- Auth on every REST + Socket.IO handshake — identity from token, never client body
-- Zod on every endpoint/event, 1MB caps, rate limits (gentle for 2 users)
-- Single-use short-lived pairing invites (10 min TTL, 5 attempt cap, transactional)
-- QR opaque tokens only, idempotent messages (client UUID), redacted logs
-- **No E2EE claimed** — HTTPS/WSS + DTLS/SRTP in transit; at-rest is your host's responsibility
+- bcrypt password hashing, JWT access tokens + rotating refresh tokens.
+- Every REST route and the Socket.IO handshake are authenticated — identity always
+  comes from the token, never from the request body.
+- Zod validation on every payload, 1 MB body cap, single-use pairing invites
+  (10-minute TTL) and opaque QR tokens.
+- Avatars and memory photos are served by the API itself (`/img/…`), so the client
+  never depends on a third-party CDN.
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) · [API](docs/api.md) · [WebSocket](docs/websocket-events.md) · [Expo Go limits](docs/expo-go-limitations.md) · [Android build](docs/android-build.md) · [Deployment (incl. Render)](docs/deployment.md) · [Configuration](docs/configuration.md) · [Testing](docs/testing.md)
+- [Server & API](server/README.md) · [Architecture](docs/architecture.md) ·
+  [API reference](docs/api.md) · [WebSocket events](docs/websocket-events.md) ·
+  [Deployment](docs/deployment.md) · [Android build](docs/android-build.md)

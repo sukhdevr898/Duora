@@ -1,17 +1,26 @@
-import { randomBytes, randomInt, createHash } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
-/** Opaque URL-safe token (used for QR invitations and refresh tokens). */
-export function opaqueToken(bytes = 32): string {
-  return randomBytes(bytes).toString('base64url');
+/** Short, URL-safe, sortable-ish id. */
+export function id(prefix = ''): string {
+  const uuid = randomUUID().replace(/-/g, '');
+  return prefix ? `${prefix}_${uuid.slice(0, 20)}` : uuid.slice(0, 24);
 }
 
-/** Short human-typable pairing code, e.g. "DUO-482913". */
-export function shortPairingCode(): string {
-  const n = randomInt(0, 1_000_000);
-  return `DUO-${n.toString(10).padStart(6, '0')}`;
+/** 6-character human pairing code without ambiguous glyphs (0/O, 1/I). */
+export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function pairingCode(length = 6): string {
+  const bytes = randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  }
+  return out;
 }
 
-/** Deterministic SHA-256 hash for refresh token storage. */
-export function sha256(value: string): string {
-  return createHash('sha256').update(value).digest('hex');
+/** Opaque token embedded in the pairing QR payload. */
+export function pairingToken(): string {
+  return randomBytes(24).toString('base64url');
 }
+
+export const nowIso = (): string => new Date().toISOString();

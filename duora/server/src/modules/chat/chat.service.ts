@@ -1,223 +1,339 @@
-import { Prisma } from '@prisma/client';
-import { prisma } from '../../database/prisma';
+import { db } from '../../db/client';
 import { ApiError } from '../../utils/ApiError';
-import { authorizeConversation } from '../../services/relationship.service';
-import type { SendMessageInput } from './chat.schema';
+import { id, nowIso } from '../../utils/ids';
+import { conversationIdFor, partnerOf } from '../pairing/pairing.service';
+import { findById } from '../users/users.service';
 
-const messageInclude = {
-  sender: { select: { id: true, displayName: true, avatarUrl: true } },
-  replyTo: { select: { id: true, text: true, senderId: true, deletedForAllAt: true } },
-  receipts: { select: { userId: true, deliveredAt: true, readAt: true } },
-} satisfies Prisma.MessageInclude;
+export type MessageRow = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  client_message_id: string;
+  type: string;
+  text: string;
+  sticker_id: string | null;
+  attachment_url: string | null;
+  reply_to_id: string | null;
+  deleted_for_all_at: string | null;
+  created_at: string;
+};
 
-type MessageView = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
+export type ChatMessage = {
+  id: string;
+  clientMessageId: string;
+  conversationId: string;
+  from: 'me' | 'partner';
+  text: string;
+  sticker: string | null;
+  type: string;
+  createdAt: string;
+  time: string;
+  status: 'sent' | 'delivered' | 'read';
+  reactions: string[];
+};
 
-function present(message: MessageView, hiddenIds: Set<string>) {
-  if (hiddenIds.has(message.id)) return null;
-  if (message.deletedForAllAt) {
-    return { ...message, text: '', attachmentUrl: null, attachmentMeta: null, deletedForAll: true };
-  }
-  return { ...message, deletedForAll: false };
-}
+export type ConversationSummary = {
+  id: string;
+  partner: {
+    id: string;
+    displayName: string;
+    nickname: string | null;
+    avatarUrl: string | null;
+    online: boolean;
+    lastSeenAt: string | null;
+  } | null;
+  lastMessage: {
+    text: string;
+    sticker: string | null;
+    createdAt: string;
+    from: 'me' | 'partner';
+  } | null;
+  unreadCount: number;
+  updatedAt: string;
+};
 
-export async function listConversations(userId: string) {
-  const participations = await prisma.conversationParticipant.findMany({
-    where: { userId },
-    include: {
-      conversation: {
-        include: {
-          participants: { include: { user: { select: { id: true, displayName: true, avatarUrl: true } } } },
-          messages: { orderBy: { createdAt: 'desc' }, take: 1 },
-        },
-      },
-    },
-  });
-
-  return Promise.all(
-    participations.map(async ({ conversation }) => {
-      const partner = conversation.participants.find((p) => p.userId !== userId)?.user ?? null;
-      const lastMessage = conversation.messages[0] ?? null;
-      const unreadCount = await prisma.message.count({
-        where: {
-          conversationId: conversation.id,
-          senderId: { not: userId },
-          hiddenBy: { none: { userId } },
-          receipts: { none: { userId, readAt: { not: null } } },
-        },
-      });
-      return {
-        id: conversation.id,
-        updatedAt: conversation.updatedAt,
-        partner,
-        lastMessage,
-        unreadCount,
-      };
-    }),
+export async function listConversations(userId: string): Promise<ConversationSummary[]> {
+  const rows = await db().all<{
+    id: string;
+    updated_at: string;
+    partner_id: string | null;
+    display_name: string | null;
+    nickname: string | null;
+    avatar_url: string | null;
+    online: number | null;
+    last_seen_at: string | null;
+    last_text: string | null;
+    last_sticker: string | null;
+    last_created_at: string | null;
+    last_sender: string | null;
+    unread: number | null;
+  }>(
+    `SELECT c.id,
+            c.updated_at,
+            p.id            AS partner_id,
+            p.display_name  AS display_name,
+            me.partner_nickname AS nickname,
+            p.avatar_url    AS avatar_url,
+            pr.online       AS online,
+            pr.last_seen_at AS last_seen_at,
+            lm.text         AS last_text,
+            lm.sticker_id   AS last_sticker,
+            lm.created_at   AS last_created_at,
+            lm.sender_id    AS last_sender,
+            (SELECT COUNT(*) FROM messages m2
+               WHERE m2.conversation_id = c.id
+                 AND m2.sender_id <> ?
+                 AND m2.created_at > COALESCE(
+                   (SELECT MAX(r.read_at) FROM message_receipts r
+                     WHERE r.user_id = ? AND r.message_id IN (
+                       SELECT id FROM messages WHERE conversation_id = c.id)), '1970-01-01')
+             ) AS unread
+       FROM conversations c
+       LEFT JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.user_id = ?
+       LEFT JOIN users p ON p.id = (SELECT user_id FROM conversation_participants
+                                      WHERE conversation_id = c.id AND user_id <> ? LIMIT 1)
+       LEFT JOIN users me ON me.id = ?
+       LEFT JOIN presence pr ON pr.user_id = p.id
+       LEFT JOIN messages lm ON lm.id = (SELECT id FROM messages WHERE conversation_id = c.id
+                                          ORDER BY created_at DESC LIMIT 1)
+      WHERE cp.user_id = ?
+      ORDER BY c.updated_at DESC`,
+    [userId, userId, userId, userId, userId, userId],
   );
+
+  return rows.map((row) => ({
+    id: row.id,
+    partner: row.partner_id
+      ? {
+          id: row.partner_id,
+          displayName: row.display_name ?? 'Partner',
+          nickname: row.nickname,
+          avatarUrl: row.avatar_url,
+          online: Boolean(row.online),
+          lastSeenAt: row.last_seen_at ?? null,
+        }
+      : null,
+    lastMessage: row.last_created_at
+      ? {
+          text: row.last_text ?? '',
+          sticker: row.last_sticker,
+          createdAt: row.last_created_at,
+          from: row.last_sender === userId ? 'me' : 'partner',
+        }
+      : null,
+    unreadCount: Number(row.unread ?? 0),
+    updatedAt: row.updated_at,
+  }));
 }
 
-export async function sendMessage(userId: string, input: SendMessageInput) {
-  const auth = await authorizeConversation(userId, input.conversationId);
-
-  if (input.type === 'ATTACHMENT' && !input.attachmentUrl) {
-    throw ApiError.badRequest('Attachment messages require an attachmentUrl');
-  }
-
-  // Idempotency: a retried client message id returns the durable original.
-  const existing = await prisma.message.findUnique({
-    where: {
-      conversationId_clientMessageId: {
-        conversationId: input.conversationId,
-        clientMessageId: input.clientMessageId,
-      },
-    },
-    include: messageInclude,
-  });
-  if (existing) {
-    if (existing.senderId !== userId) throw ApiError.forbidden('Client message id belongs to another sender');
-    return existing;
-  }
-
-  if (input.replyToId) {
-    const parent = await prisma.message.findFirst({
-      where: { id: input.replyToId, conversationId: input.conversationId },
-    });
-    if (!parent) throw ApiError.badRequest('Reply target message not found');
-  }
-
-  const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.message.create({
-      data: {
-        conversationId: input.conversationId,
-        senderId: userId,
-        clientMessageId: input.clientMessageId,
-        text: input.text,
-        type: input.type,
-        attachmentUrl: input.attachmentUrl ?? null,
-        attachmentMeta: (input.attachmentMeta ?? Prisma.JsonNull) as
-          | Prisma.InputJsonValue
-          | typeof Prisma.JsonNull,
-        replyToId: input.replyToId ?? null,
-        // Sender implicitly has read their own message; partner receipt starts empty.
-        receipts: {
-          create: auth.participantIds.map((participantId) => ({
-            userId: participantId,
-            readAt: participantId === userId ? new Date() : null,
-            deliveredAt: participantId === userId ? new Date() : null,
-          })),
-        },
-      },
-      include: messageInclude,
-    });
-    await tx.conversation.update({
-      where: { id: input.conversationId },
-      data: { updatedAt: new Date() },
-    });
-    return created;
-  });
-
-  return message;
-}
-
-export async function getMessages(
+export async function listMessages(
   userId: string,
   conversationId: string,
-  options: { cursor?: string; limit: number },
-) {
-  await authorizeConversation(userId, conversationId);
+  limit = 60,
+): Promise<ChatMessage[]> {
+  await assertMember(userId, conversationId);
+  const rows = await db().all<MessageRow>(
+    `SELECT * FROM messages
+     WHERE conversation_id = ? AND deleted_for_all_at IS NULL
+     ORDER BY created_at DESC LIMIT ?`,
+    [conversationId, limit],
+  );
+  const messages = rows.reverse();
+  if (messages.length === 0) return [];
 
-  const hidden = await prisma.hiddenMessage.findMany({
-    where: { userId, message: { conversationId } },
-    select: { messageId: true },
+  const ids = messages.map((m) => m.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const receiptRows = await db().all<{ message_id: string; user_id: string; read_at: string | null; delivered_at: string | null }>(
+    `SELECT message_id, user_id, read_at, delivered_at FROM message_receipts WHERE message_id IN (${placeholders})`,
+    ids,
+  );
+  const reactionRows = await db().all<{ message_id: string; emoji: string }>(
+    `SELECT message_id, emoji FROM reactions WHERE message_id IN (${placeholders})`,
+    ids,
+  );
+
+  const receiptMap = new Map<string, { read: boolean; delivered: boolean }>();
+  for (const r of receiptRows) {
+    const current = receiptMap.get(r.message_id) ?? { read: false, delivered: false };
+    if (r.read_at) current.read = true;
+    if (r.delivered_at) current.delivered = true;
+    receiptMap.set(r.message_id, current);
+  }
+
+  const reactionMap = new Map<string, string[]>();
+  for (const r of reactionRows) {
+    const list = reactionMap.get(r.message_id) ?? [];
+    list.push(r.emoji);
+    reactionMap.set(r.message_id, list);
+  }
+
+  return messages.map((m) => {
+    const receipt = receiptMap.get(m.id);
+    const fromPartner = m.sender_id !== userId;
+    const status: ChatMessage['status'] = fromPartner
+      ? 'delivered'
+      : receipt?.read
+        ? 'read'
+        : receipt?.delivered
+          ? 'delivered'
+          : 'sent';
+    return {
+      id: m.id,
+      clientMessageId: m.client_message_id,
+      conversationId: m.conversation_id,
+      from: fromPartner ? 'partner' : 'me',
+      text: m.text,
+      sticker: m.sticker_id,
+      type: m.type,
+      createdAt: m.created_at,
+      time: formatTime(m.created_at),
+      status,
+      reactions: reactionMap.get(m.id) ?? [],
+    };
   });
-  const hiddenIds = new Set(hidden.map((h) => h.messageId));
+}
 
-  const rows = await prisma.message.findMany({
-    where: {
+export async function sendMessage(
+  userId: string,
+  conversationId: string,
+  input: { clientMessageId: string; text: string; sticker?: string | null },
+): Promise<ChatMessage> {
+  await assertMember(userId, conversationId);
+  const text = input.text.trim();
+  if (!text && !input.sticker) throw ApiError.badRequest('A message needs text or a sticker');
+
+  const existing = await db().one<MessageRow>(
+    'SELECT * FROM messages WHERE conversation_id = ? AND client_message_id = ?',
+    [conversationId, input.clientMessageId],
+  );
+  if (existing) {
+    const [mapped] = await listMessages(userId, conversationId, 1);
+    return mapped;
+  }
+
+  const messageId = id('msg');
+  const now = nowIso();
+  await db().run(
+    `INSERT INTO messages
+       (id, conversation_id, sender_id, client_message_id, type, text, sticker_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      messageId,
       conversationId,
-      ...(options.cursor ? { createdAt: { lt: new Date(options.cursor) } } : {}),
-      hiddenBy: { none: { userId } },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: options.limit + 1,
-    include: messageInclude,
-  });
-
-  const hasMore = rows.length > options.limit;
-  const page = hasMore ? rows.slice(0, options.limit) : rows;
-  const messages = page.reverse().map((m) => present(m, hiddenIds)).filter((m): m is NonNullable<typeof m> => m !== null);
+      userId,
+      input.clientMessageId,
+      input.sticker ? 'STICKER' : 'TEXT',
+      text,
+      input.sticker ?? null,
+      now,
+    ],
+  );
+  await db().run(
+    `INSERT INTO message_receipts (message_id, user_id, delivered_at) VALUES (?, ?, ?)`,
+    [messageId, userId, now],
+  );
+  await db().run('UPDATE conversations SET updated_at = ? WHERE id = ?', [now, conversationId]);
 
   return {
-    messages,
-    nextCursor: hasMore ? page[page.length - 1].createdAt.toISOString() : null,
+    id: messageId,
+    clientMessageId: input.clientMessageId,
+    conversationId,
+    from: 'me',
+    text,
+    sticker: input.sticker ?? null,
+    type: input.sticker ? 'STICKER' : 'TEXT',
+    createdAt: now,
+    time: formatTime(now),
+    status: 'sent',
+    reactions: [],
   };
 }
 
-/** Reconnect reconciliation: everything new since the supplied timestamp. */
-export async function syncSince(userId: string, conversationId: string, since: Date) {
-  await authorizeConversation(userId, conversationId);
-  const [messages, receipts] = await Promise.all([
-    prisma.message.findMany({
-      where: { conversationId, createdAt: { gt: since }, hiddenBy: { none: { userId } } },
-      orderBy: { createdAt: 'asc' },
-      include: messageInclude,
-    }),
-    prisma.messageReceipt.findMany({
-      where: { userId, readAt: { gt: since } },
-      select: { messageId: true, readAt: true, deliveredAt: true },
-    }),
-  ]);
-  return { messages, receipts };
+/** Marks the partner's messages as read for this user. */
+export async function markRead(userId: string, conversationId: string): Promise<number> {
+  await assertMember(userId, conversationId);
+  const rows = await db().all<{ id: string }>(
+    `SELECT id FROM messages WHERE conversation_id = ? AND sender_id <> ? AND deleted_for_all_at IS NULL`,
+    [conversationId, userId],
+  );
+  const now = nowIso();
+  for (const row of rows) {
+    await db().run(
+      `INSERT INTO message_receipts (message_id, user_id, delivered_at, read_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(message_id, user_id) DO UPDATE SET read_at = COALESCE(read_at, ?)`,
+      [row.id, userId, now, now, now],
+    );
+  }
+  return rows.length;
 }
 
-export async function markDelivered(userId: string, conversationId: string): Promise<number> {
-  await authorizeConversation(userId, conversationId);
-  const result = await prisma.messageReceipt.updateMany({
-    where: {
-      userId,
-      deliveredAt: null,
-      message: { conversationId, senderId: { not: userId } },
-    },
-    data: { deliveredAt: new Date() },
-  });
-  return result.count;
-}
-
-export async function markRead(userId: string, conversationId: string, messageId?: string) {
-  await authorizeConversation(userId, conversationId);
-  const result = await prisma.messageReceipt.updateMany({
-    where: {
-      userId,
-      readAt: null,
-      message: {
-        conversationId,
-        senderId: { not: userId },
-        ...(messageId ? { id: messageId } : {}),
-      },
-    },
-    data: { readAt: new Date(), deliveredAt: new Date() },
-  });
-  return { updated: result.count, readAt: new Date() };
-}
-
-export async function deleteForMe(userId: string, messageId: string): Promise<void> {
-  const message = await prisma.message.findFirst({ where: { id: messageId }, include: { conversation: true } });
+export async function toggleReaction(
+  userId: string,
+  messageId: string,
+  emoji: string,
+): Promise<string[]> {
+  const message = await db().one<MessageRow>('SELECT * FROM messages WHERE id = ?', [messageId]);
   if (!message) throw ApiError.notFound('Message not found');
-  await authorizeConversation(userId, message.conversationId);
-  await prisma.hiddenMessage.upsert({
-    where: { messageId_userId: { messageId, userId } },
-    create: { messageId, userId },
-    update: { hiddenAt: new Date() },
-  });
+  await assertMember(userId, message.conversation_id);
+
+  const existing = await db().one(
+    'SELECT 1 AS x FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?',
+    [messageId, userId, emoji],
+  );
+  if (existing) {
+    await db().run('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?', [
+      messageId,
+      userId,
+      emoji,
+    ]);
+  } else {
+    await db().run(
+      'INSERT INTO reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?)',
+      [messageId, userId, emoji, nowIso()],
+    );
+  }
+  const rows = await db().all<{ emoji: string }>(
+    'SELECT emoji FROM reactions WHERE message_id = ? ORDER BY created_at',
+    [messageId],
+  );
+  return rows.map((r) => r.emoji);
 }
 
-export async function deleteForEveryone(userId: string, messageId: string): Promise<{ id: string; at: Date }> {
-  const message = await prisma.message.findUnique({ where: { id: messageId } });
+export async function hideMessage(userId: string, messageId: string): Promise<void> {
+  const message = await db().one<MessageRow>('SELECT * FROM messages WHERE id = ?', [messageId]);
   if (!message) throw ApiError.notFound('Message not found');
-  if (message.senderId !== userId) throw ApiError.forbidden('Only the sender can delete this message for everyone');
-  const updated = await prisma.message.update({
-    where: { id: messageId },
-    data: { deletedForAllAt: new Date(), text: '', attachmentUrl: null, attachmentMeta: Prisma.JsonNull },
-  });
-  return { id: updated.id, at: updated.deletedForAllAt! };
+  await assertMember(userId, message.conversation_id);
+  await db().run(
+    'INSERT INTO hidden_messages (message_id, user_id, hidden_at) VALUES (?, ?, ?)',
+    [messageId, userId, nowIso()],
+  );
+}
+
+export async function assertMember(userId: string, conversationId: string): Promise<void> {
+  const row = await db().one(
+    'SELECT 1 AS x FROM conversation_participants WHERE conversation_id = ? AND user_id = ?',
+    [conversationId, userId],
+  );
+  if (!row) throw ApiError.forbidden('You are not part of this conversation');
+}
+
+/** Convenience for the app: resolves the caller's conversation automatically. */
+export async function myConversationId(userId: string): Promise<string | null> {
+  return conversationIdFor(userId);
+}
+
+export async function partnerName(userId: string): Promise<string> {
+  const partner = await partnerOf(userId);
+  if (!partner) return 'Partner';
+  const me = await findById(userId);
+  return me?.partner_nickname ?? partner.partner_nickname ?? partner.display_name;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso)
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    .toLowerCase()
+    .replace(/\s/g, ' ')
+    .replace(/^0/, '');
 }

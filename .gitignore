@@ -6,3 +6,12 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# local SQLite databases (server/data)
+duora/server/data/
+
+# Expo build artefacts
+duora/app/.expo/
+duora/app/dist/
+duora/app/.expo-shared/
+duora/app/web-build/

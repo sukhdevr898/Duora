@@ -1,77 +1,65 @@
-# Render blueprint for Duora — personal lightweight deployment
-# Commit this file, then in Render: New → Blueprint → Connect repo → Apply
+# ---------------------------------------------------------------------------
+# Duora — Render blueprint
 #
-# It creates:
-#   1. A Node web service (duora-server) from ./duora/server
-#   2. A managed PostgreSQL (duora-db) — free tier suitable for 2-person use
+#   Render → New → Blueprint → connect this repo → Apply
 #
-# Docs: https://render.com/docs/blueprint-spec
-# Full guide: duora/docs/deployment.md#render-free-tier
+# Creates:
+#   1. duora-server — a Node web service running the Express + Socket.IO API
+#      (Dockerfile in duora/server/Dockerfile)
+#   2. duora-db     — a managed PostgreSQL instance (free tier, 2 people is plenty)
+#
+# The API migrates the schema on every boot, so there is no separate migration
+# step. Point the mobile app at the service URL:
+#      EXPO_PUBLIC_API_URL=https://duora-server.onrender.com
+# ---------------------------------------------------------------------------
+
+databases:
+  - name: duora-db
+    databaseName: duora
+    user: duora
+    plan: free
+    postgresMajorVersion: "16"
+    region: singapore
 
 services:
   - type: web
     name: duora-server
-    runtime: node
-    plan: free                 # personal use — sleeps after 15 min idle; wakes on request
-    region: singapore          # closest to Jaipur/Rajasthan; change to oregon/frankfurt if preferred
-    rootDir: duora/server
-    # --include=dev is REQUIRED: NODE_ENV=production (below) makes a bare `npm ci`
-    # skip devDependencies, so tsc/@types/node would be missing and the build fails
-    # with "Cannot find type definition file for 'node'".
-    # `npm run build` = `prisma generate && tsc -p tsconfig.json` → emits dist/server.js
-    buildCommand: npm ci --include=dev && npm run build
-    startCommand: npx prisma migrate deploy && node dist/server.js
+    runtime: docker
+    dockerfilePath: ./duora/server/Dockerfile
+    dockerContext: ./duora/server
+    plan: free
+    region: singapore
     healthCheckPath: /health
-    autoDeploy: false          # manual deploys — flip to true after you verify
+    # Manual deploys — flip to true once you are happy with the first release.
+    autoDeploy: false
     envVars:
       - key: NODE_ENV
         value: production
-      - key: NODE_VERSION
-        value: "22"              # pin Node 22 LTS — without this Render picks the
-                               # newest Node (26.x), which Prisma 6 + @types/node 20
-                               # are not built for. .node-version does the same.
       - key: PORT
-        value: 10000           # Render injects PORT=10000; server reads env.PORT
+        value: 10000
       - key: DATABASE_URL
         fromDatabase:
           name: duora-db
           property: connectionString
       - key: JWT_ACCESS_SECRET
-        generateValue: true    # Render generates a random secret
+        generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-      - key: PUBLIC_BASE_URL
-        value: https://duora-server.onrender.com  # replace after you know your URL
-      - key: CORS_ORIGINS
-        value: ""
-      - key: LOG_LEVEL
-        value: warn            # lightweight: less I/O on free tier
-      # Optional — leave empty to skip push/TURN (app still works):
-      - key: FIREBASE_PROJECT_ID
-        sync: false
-      - key: FIREBASE_CLIENT_EMAIL
-        sync: false
-      - key: FIREBASE_PRIVATE_KEY
-        sync: false
-      - key: TURN_SECRET
-        sync: false
-      - key: TURN_URLS
-        sync: false
-      - key: STUN_URLS
-        value: stun:stun.l.google.com:19302
-      - key: INVITATION_TTL_MINUTES
+      - key: ACCESS_TTL
+        value: 30d
+      - key: REFRESH_TTL_DAYS
+        value: 30
+      - key: APP_VERSION
+        value: 2.0.0
+      - key: REGION
+        value: Singapore · ap-southeast
+      - key: PAIRING_TTL_MINUTES
         value: 10
-      - key: ATTACHMENTS_ENABLED
-        value: false           # lightweight: disable binary uploads for personal use
-      - key: ANDROID_LATEST_VERSION
-        value: 1.0.0
-      - key: ANDROID_MIN_SUPPORTED_VERSION
-        value: 1.0.0
-      - key: ANDROID_RELEASE_URL
-        value: https://github.com/sukhdevr898/Duora/releases
-
-databases:
-  - name: duora-db
-    plan: free                 # 256MB RAM, 1GB storage — ample for 2-person chat
-    region: singapore
-    ipAllowList: []            # only the duora-server service can connect
+      # Avatars and memory photos are served by the API itself.
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: duora-server
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: SEED_ON_BOOT
+        value: "true"

@@ -1,37 +1,33 @@
 export class ApiError extends Error {
-  public readonly statusCode: number;
-  public readonly code: string;
-  public readonly details?: unknown;
-
-  constructor(statusCode: number, code: string, message: string, details?: unknown) {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown,
+  ) {
     super(message);
     this.name = 'ApiError';
-    this.statusCode = statusCode;
-    this.code = code;
-    this.details = details;
   }
 
-  static badRequest(message: string, details?: unknown): ApiError {
+  static badRequest(message = 'Bad request', details?: unknown) {
     return new ApiError(400, 'bad_request', message, details);
   }
-
-  static unauthorized(message = 'Authentication required'): ApiError {
+  static unauthorized(message = 'Not authorised') {
     return new ApiError(401, 'unauthorized', message);
   }
-
-  static forbidden(message = 'Operation not allowed'): ApiError {
+  static forbidden(message = 'Forbidden') {
     return new ApiError(403, 'forbidden', message);
   }
-
-  static notFound(message = 'Resource not found'): ApiError {
+  static notFound(message = 'Not found') {
     return new ApiError(404, 'not_found', message);
   }
-
-  static conflict(message: string, details?: unknown): ApiError {
+  static conflict(message = 'Already exists', details?: unknown) {
     return new ApiError(409, 'conflict', message, details);
   }
-
-  static tooMany(message = 'Too many requests'): ApiError {
+  static tooMany(message = 'Too many requests') {
     return new ApiError(429, 'rate_limited', message);
+  }
+  static internal(message = 'Something went wrong') {
+    return new ApiError(500, 'internal_error', message);
   }
 }
