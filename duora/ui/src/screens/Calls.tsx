@@ -2,16 +2,21 @@ import { motion } from 'framer-motion';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Clock3,
+  Heart,
+  MessageCircle,
   MoreVertical,
   Phone,
   PhoneIncoming,
   PhoneMissed,
   Search,
   Video,
+  X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Avatar } from '../components/Avatar';
 import { BottomNav } from '../components/BottomNav';
+import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet, useToast } from '../components/Overlay';
 import { callLogs, partner, type CallLog } from '../data/mock';
 import { useRouter } from '../nav/router';
@@ -24,12 +29,25 @@ export function Calls() {
   const { toast } = useToast();
   const [filter, setFilter] = useState<Filter>('All');
   const [selected, setSelected] = useState<CallLog | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
 
   const list = useMemo(() => {
-    if (filter === 'All') return callLogs;
-    if (filter === 'Missed') return callLogs.filter((c) => c.missed);
-    return callLogs.filter((c) => c.kind === filter.toLowerCase());
-  }, [filter]);
+    const base =
+      filter === 'All'
+        ? callLogs
+        : filter === 'Missed'
+          ? callLogs.filter((c) => c.missed)
+          : callLogs.filter((c) => c.kind === filter.toLowerCase());
+    if (!query.trim()) return base;
+    const q = query.toLowerCase();
+    return base.filter(
+      (c) =>
+        partner.name.includes(q) ||
+        c.type.toLowerCase().includes(q) ||
+        c.day.toLowerCase().includes(q),
+    );
+  }, [filter, query]);
 
   return (
     <div className="screen">
@@ -40,12 +58,16 @@ export function Calls() {
           <span className="appbar__spacer" />
           <button
             type="button"
-            className="icon-btn ghost press"
-            onClick={() => toast('Search calls')}
-            aria-label="Search calls"
+            className={`icon-btn ${searching ? 'soft' : 'ghost'} press`}
+            onClick={() => {
+              setSearching((v) => !v);
+              setQuery('');
+            }}
+            aria-label={searching ? 'Close search' : 'Search calls'}
           >
-            <Search size={19} strokeWidth={2.2} />
+            {searching ? <X size={19} strokeWidth={2.2} /> : <Search size={19} strokeWidth={2.2} />}
           </button>
+          <ConnectionPill compact />
           <button
             type="button"
             className="icon-btn ghost press"
@@ -57,6 +79,76 @@ export function Calls() {
         </div>
 
         <div className="screen-scroll">
+          <div className="call-hero">
+            <div className="call-hero__left">
+              <Avatar src={partner.photo} size={54} ring online alt={partner.fullName} />
+              <div>
+                <div className="call-hero__name">{partner.name}</div>
+                <div className="call-hero__status">
+                  <span className="online-dot" /> Ready to talk
+                </div>
+              </div>
+            </div>
+            <div className="call-hero__actions">
+              <button
+                type="button"
+                className="call-hero__btn call-hero__btn--voice press"
+                onClick={() => navigate({ name: 'audio-call' })}
+                aria-label="Start voice call"
+              >
+                <Phone size={19} strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                className="call-hero__btn call-hero__btn--video press"
+                onClick={() => navigate({ name: 'video-call' })}
+                aria-label="Start video call"
+              >
+                <Video size={19} strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                className="call-hero__btn call-hero__btn--msg press"
+                onClick={() => toast('Opening chat…')}
+                aria-label="Send a message"
+              >
+                <MessageCircle size={18} strokeWidth={2.4} />
+              </button>
+            </div>
+          </div>
+
+          <div className="call-stats">
+            <div className="call-stats__cell">
+              <Clock3 size={13} strokeWidth={2.3} />
+              <b>9h 20m</b>
+              <span>this week</span>
+            </div>
+            <div className="call-stats__cell">
+              <Phone size={13} strokeWidth={2.3} />
+              <b>48</b>
+              <span>calls</span>
+            </div>
+            <div className="call-stats__cell">
+              <Heart size={13} strokeWidth={2.3} />
+              <b>96%</b>
+              <span>connected</span>
+            </div>
+          </div>
+
+          {searching && (
+            <div style={{ padding: '0 20px 12px' }}>
+              <div className="searchbar">
+                <Search size={16} strokeWidth={2.2} />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search call history…"
+                  aria-label="Search call history"
+                />
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, padding: '2px 20px 14px' }}>
             {filters.map((f) => (
               <button

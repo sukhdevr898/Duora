@@ -14,6 +14,7 @@ import {
   Smile,
   Sticker as StickerIcon,
   Video,
+  WifiOff,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '../components/Avatar';
@@ -22,6 +23,7 @@ import { RichText } from '../components/RichText';
 import { Sticker, stickers } from '../components/Sticker';
 import { messages as seed, partner, quickReplies, type Message } from '../data/mock';
 import { useRouter } from '../nav/router';
+import { useApp } from '../state/app';
 
 const now = () =>
   new Date()
@@ -40,6 +42,7 @@ const replies = [
 
 export function Conversation() {
   const { back, navigate } = useRouter();
+  const { server } = useApp();
   const { toast } = useToast();
   const [items, setItems] = useState<Message[]>(seed);
   const [draft, setDraft] = useState('');
@@ -191,6 +194,15 @@ export function Conversation() {
             </button>
           </div>
         </div>
+
+        {server.status !== 'online' && (
+          <div className="convo__offline">
+            <WifiOff size={13} strokeWidth={2.4} />
+            {server.status === 'offline'
+              ? 'Offline — messages will send when you reconnect'
+              : 'Reconnecting…'}
+          </div>
+        )}
 
         <div className="convo__scroll" ref={scrollRef}>
           <div className="day-chip">Today</div>

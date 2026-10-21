@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check } from 'lucide-react';
+import { RichText } from './RichText';
 import {
   createContext,
   useCallback,
@@ -99,7 +100,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
           >
             <Check size={15} strokeWidth={3} />
-            {message}
+            <RichText text={message} size={13} />
           </motion.div>
         )}
       </AnimatePresence>
