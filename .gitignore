@@ -18,3 +18,4 @@ duora/app/web-build/
 
 # local web export used for production-config QA
 duora/app/dist-prod/
+duora/app/dist-test/

@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -26,12 +27,14 @@ export const PressableScale = memo(function PressableScale({
   style,
   disabled,
   accessibilityLabel,
+  accessibilityState,
 }: {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
   accessibilityLabel?: string;
+  accessibilityState?: { disabled?: boolean; busy?: boolean; checked?: boolean };
 }) {
   const scale = useSharedValue(1);
   const animated = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -40,6 +43,7 @@ export const PressableScale = memo(function PressableScale({
       onPress={onPress}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
       onPressIn={() => {
         scale.value = withSpring(0.955, { damping: 18, stiffness: 320 });
       }}
@@ -65,6 +69,7 @@ export const Btn = memo(function Btn({
   variant = 'primary',
   block = true,
   disabled,
+  loading,
   style,
   textStyle,
 }: {
@@ -74,14 +79,21 @@ export const Btn = memo(function Btn({
   variant?: BtnVariant;
   block?: boolean;
   disabled?: boolean;
+  /** Shows a spinner and blocks further presses. */
+  loading?: boolean;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
 }) {
   const { t, shadow } = useDuoraTheme();
+  const blocked = Boolean(disabled || loading);
 
   const content = (
     <View style={styles.btnRow}>
-      {Icon ? <Icon size={18} strokeWidth={2.6} color={variant === 'primary' ? '#fff' : t.primaryDeep} /> : null}
+      {loading ? (
+        <ActivityIndicator size="small" color={variant === 'primary' ? '#fff' : t.primaryDeep} />
+      ) : Icon ? (
+        <Icon size={18} strokeWidth={2.6} color={variant === 'primary' ? '#fff' : t.primaryDeep} />
+      ) : null}
       <Text
         numberOfLines={1}
         style={[
@@ -129,8 +141,13 @@ export const Btn = memo(function Btn({
     );
 
   return (
-    <PressableScale onPress={onPress} disabled={disabled} style={block ? { width: '100%' } : undefined}>
-      {body}
+    <PressableScale
+      onPress={onPress}
+      disabled={blocked}
+      accessibilityState={{ disabled: blocked, busy: Boolean(loading) }}
+      style={block ? { width: '100%' } : undefined}
+    >
+      <View style={disabled && !loading ? { opacity: 0.55 } : undefined}>{body}</View>
     </PressableScale>
   );
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Line } from 'react-native-svg';
@@ -23,7 +23,7 @@ import { Btn, PressableScale } from '../src/components/ui';
 import { useToast } from '../src/components/Overlay';
 import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { useStore } from '../src/state/store';
-import { API_BASE_URL } from '../src/api/client';
+import { getApiBaseUrl, normalizeBaseUrl } from '../src/api/client';
 
 const STATUS_COPY = {
   online: { label: 'Connected', sub: 'Everything is synced and secure', color: '#22c55e' },
@@ -101,9 +101,19 @@ export default function ServerScreen() {
   const loadHealth = useStore((s) => s.loadHealth);
   const setAutoReconnect = useStore((s) => s.setAutoReconnect);
   const simulateOutage = useStore((s) => s.simulateOutage);
+  const serverUrl = useStore((s) => s.serverUrl);
+  const setServerUrl = useStore((s) => s.setServerUrl);
+  const testServerUrl = useStore((s) => s.testServerUrl);
 
   const [now, setNow] = useState(Date.now());
   const [checking, setChecking] = useState(false);
+  const [draftUrl, setDraftUrl] = useState(serverUrl);
+  const [urlBusy, setUrlBusy] = useState(false);
+  const [urlNote, setUrlNote] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    setDraftUrl(serverUrl);
+  }, [serverUrl]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -132,6 +142,30 @@ export default function ServerScreen() {
     void checkServer();
     void loadHealth();
     setTimeout(() => setChecking(false), 1600);
+  };
+
+  const onTestUrl = async () => {
+    setUrlBusy(true);
+    setUrlNote(null);
+    const result = await testServerUrl(draftUrl);
+    setUrlNote(result);
+    setUrlBusy(false);
+  };
+
+  const onSaveUrl = async () => {
+    setUrlBusy(true);
+    setUrlNote(null);
+    const result = await testServerUrl(draftUrl);
+    if (!result.ok) {
+      setUrlNote(result);
+      setUrlBusy(false);
+      return;
+    }
+    await setServerUrl(draftUrl);
+    setDraftUrl(normalizeBaseUrl(draftUrl));
+    setUrlNote({ ok: true, message: `Connected to ${normalizeBaseUrl(draftUrl)}` });
+    setUrlBusy(false);
+    void loadHealth();
   };
 
   return (
@@ -216,7 +250,7 @@ export default function ServerScreen() {
             <View style={styles.endpoint}>
               <Globe2 size={11} strokeWidth={2.4} color={t.text3} />
               <Text style={[styles.endpointText, { color: t.text3 }]}>
-                {API_BASE_URL.replace('https://', '')}
+                {getApiBaseUrl().replace(/^https?:\/\//, '')}
               </Text>
             </View>
 
@@ -263,6 +297,61 @@ export default function ServerScreen() {
               </Text>
             </View>
           ) : null}
+
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionTitle, { color: t.text }]}>Server address</Text>
+            <Text style={[styles.sectionMeta, { color: t.text3 }]}>where the app connects</Text>
+          </View>
+
+          <View style={[styles.group, { backgroundColor: t.card }, shadow('sm')]}>
+            <View style={styles.urlField}>
+              <Globe2 size={15} strokeWidth={2.3} color={t.text3} />
+              <TextInput
+                value={draftUrl}
+                onChangeText={setDraftUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://duora.onrender.com"
+                placeholderTextColor={t.text3}
+                style={[styles.urlInput, { color: t.text }]}
+                accessibilityLabel="Server address"
+              />
+            </View>
+            <View style={styles.urlActions}>
+              <View style={styles.urlSlot}>
+                <Btn
+                  label={urlBusy ? 'Testing…' : 'Test'}
+                  variant="outline"
+                  onPress={() => void onTestUrl()}
+                  disabled={urlBusy}
+                  block={false}
+                />
+              </View>
+              <View style={styles.urlSlot}>
+                <Btn
+                  label="Save & connect"
+                  onPress={() => void onSaveUrl()}
+                  loading={urlBusy}
+                  block={false}
+                />
+              </View>
+            </View>
+            {urlNote ? (
+              <Text
+                style={[
+                  styles.urlNote,
+                  { color: urlNote.ok ? t.mint : t.danger },
+                ]}
+              >
+                {urlNote.message}
+              </Text>
+            ) : null}
+            <Text style={[styles.urlHint, { color: t.text3 }]}>
+              Paste the address of your own Render deployment if the default one is asleep or was
+              redeployed.
+            </Text>
+          </View>
 
           <View style={styles.metricGrid}>
             {[
@@ -477,5 +566,22 @@ const styles = StyleSheet.create({
   serviceName: { fontSize: 13, fontWeight: '700' },
   serviceDetail: { fontSize: 10.5, fontWeight: '500', marginTop: 1 },
   servicePing: { fontSize: 11.5, fontWeight: '700' },
+  urlField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    margin: 14,
+    marginBottom: 10,
+    paddingHorizontal: 13,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(61, 39, 116, 0.12)',
+  },
+  urlInput: { flex: 1, fontSize: 13.5, fontWeight: '600' },
+  urlActions: { flexDirection: 'row', gap: 10, paddingHorizontal: 14 },
+  urlSlot: { flex: 1 },
+  urlNote: { fontSize: 12, fontWeight: '700', marginTop: 12, marginHorizontal: 14 },
+  urlHint: { fontSize: 11, lineHeight: 16, fontWeight: '500', margin: 14, marginTop: 10 },
   foot: { textAlign: 'center', fontSize: 11, fontWeight: '600', marginTop: 16 },
 });

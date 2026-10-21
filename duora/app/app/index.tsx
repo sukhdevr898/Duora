@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,15 +12,21 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { ArrowRight, Heart } from 'lucide-react-native';
+import { ArrowRight, Eye, EyeOff, Heart, ServerCog } from 'lucide-react-native';
 import { HeartOrb, WelcomeWaves } from '../src/components/Brand';
 import { LogoLockup } from '../src/components/BrandWordmark';
 import { Btn, PressableScale } from '../src/components/ui';
 import { Sheet } from '../src/components/Overlay';
+import { ErrorCard, InlineNote, StatusPill } from '../src/components/Feedback';
 import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { fonts } from '../src/theme/fonts';
 import { ABSOLUTE_FILL } from '../src/theme/tokens';
 import { useStore } from '../src/state/store';
+
+const DEMO_EMAIL = 'sukhdev@duora.app';
+const DEMO_PASSWORD = 'love1234';
+
+type FieldErrors = { name?: string; email?: string; password?: string };
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -29,14 +35,21 @@ export default function WelcomeScreen() {
   const authStatus = useStore((s) => s.authStatus);
   const authBusy = useStore((s) => s.authBusy);
   const authError = useStore((s) => s.authError);
+  const clearAuthError = useStore((s) => s.clearAuthError);
   const login = useStore((s) => s.login);
   const register = useStore((s) => s.register);
+  const serverStatus = useStore((s) => s.server.status);
+  const serverUrl = useStore((s) => s.serverUrl);
+  const checkServer = useStore((s) => s.checkServer);
 
   const [authOpen, setAuthOpen] = useState(false);
   const [mode_, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('sukhdev@duora.app');
-  const [password, setPassword] = useState('love1234');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [reveal, setReveal] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState(false);
 
   const dark = mode === 'dark';
 
@@ -44,15 +57,71 @@ export default function WelcomeScreen() {
     if (authStatus === 'authenticated') router.replace('/(tabs)');
   }, [authStatus, router]);
 
+  // Know straight away whether the Duora server is answering — a broken
+  // deployment is the number one reason signing in does not work.
+  useEffect(() => {
+    void checkServer();
+  }, [checkServer]);
+
+  const endpoint = serverUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
+  const statusLabel = useMemo(() => {
+    if (serverStatus === 'online') return `Connected · ${endpoint}`;
+    if (serverStatus === 'connecting') return 'Waking the server…';
+    return `Cannot reach ${endpoint}`;
+  }, [serverStatus, endpoint]);
+
+  const openAuth = useCallback(
+    (next: 'login' | 'register') => {
+      setMode(next);
+      setFieldErrors({});
+      setTouched(false);
+      clearAuthError();
+      setAuthOpen(true);
+    },
+    [clearAuthError],
+  );
+
+  const validate = useCallback((): FieldErrors => {
+    const errors: FieldErrors = {};
+    const mail = email.trim();
+    if (!mail) errors.email = 'Enter your email';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mail)) errors.email = 'That email does not look right';
+    if (!password) errors.password = 'Enter your password';
+    else if (mode_ === 'register' && password.length < 8)
+      errors.password = 'Use at least 8 characters';
+    if (mode_ === 'register' && !name.trim()) errors.name = 'Tell us your name';
+    return errors;
+  }, [email, password, name, mode_]);
+
   const submit = async () => {
+    const errors = validate();
+    setFieldErrors(errors);
+    setTouched(true);
+    if (Object.keys(errors).length > 0) return;
+
     const ok =
       mode_ === 'login'
         ? await login(email.trim(), password)
-        : await register(email.trim(), password, name.trim() || 'Duora');
-    if (ok) setAuthOpen(false);
+        : await register(email.trim(), password, name.trim());
+    if (ok) {
+      setAuthOpen(false);
+      setPassword('');
+    }
+  };
+
+  const useDemo = () => {
+    setMode('login');
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+    setFieldErrors({});
+    clearAuthError();
   };
 
   if (authStatus === 'authenticated') return null;
+
+  const showFieldError = (key: keyof FieldErrors) =>
+    touched ? fieldErrors[key] : undefined;
 
   return (
     <View style={styles.root}>
@@ -109,6 +178,16 @@ export default function WelcomeScreen() {
       <WelcomeWaves />
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 26 }]}>
+        {serverStatus === 'offline' ? (
+          <PressableScale onPress={() => void checkServer()} accessibilityLabel="Reconnect to the server">
+            <View style={[styles.offline, { backgroundColor: `${t.danger}1f`, borderColor: `${t.danger}45` }]}>
+              <Text style={[styles.offlineText, { color: t.text2 }]}>
+                The Duora server is not answering. Tap to try again.
+              </Text>
+            </View>
+          </PressableScale>
+        ) : null}
+
         <Animated.View entering={FadeInDown.duration(700).delay(450)}>
           <Text style={[styles.script, { color: dark ? '#d9c8ff' : '#5e3ac9' }]}>
             Closer
@@ -121,7 +200,7 @@ export default function WelcomeScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(700).delay(600)} style={styles.actions}>
-          <PressableScale onPress={() => setAuthOpen(true)} accessibilityLabel="Enter my space">
+          <PressableScale onPress={() => openAuth('login')} accessibilityLabel="Enter my space">
             <Svg width="100%" height={54} style={styles.cta}>
               <Defs>
                 <LinearGradient id="ctaGrad" x1="0" y1="0" x2="0.35" y2="1">
@@ -129,7 +208,7 @@ export default function WelcomeScreen() {
                   <Stop offset="100%" stopColor={dark ? '#241b45' : '#f4ebff'} />
                 </LinearGradient>
               </Defs>
-              <Rect x="0" y="0" width="100%" height="54" rx="27" fill="url(#ctaGrad)" />
+              <Rect x="0" y="0" width="100%" height={54} rx={27} fill="url(#ctaGrad)" />
             </Svg>
             <View style={styles.ctaInner}>
               <Text style={[styles.ctaText, { color: dark ? '#e9e2ff' : '#4a2bd0' }]}>Enter my space</Text>
@@ -149,52 +228,155 @@ export default function WelcomeScreen() {
         subtitle="Your account keeps the two of you connected."
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {mode_ === 'register' ? (
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Your name"
-                placeholderTextColor={t.text3}
-                style={[styles.input, { backgroundColor: t.fieldBg, color: t.text, borderColor: t.line }]}
-                accessibilityLabel="Your name"
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={styles.statusRow}>
+              <StatusPill
+                status={serverStatus}
+                label={statusLabel}
+                onPress={() => void checkServer()}
+              />
+            </View>
+
+            {authError ? (
+              <ErrorCard
+                error={authError}
+                onRetry={() => {
+                  // "Already taken" is not worth retrying — offer the sign in.
+                  if (authError.kind === 'conflict') {
+                    setMode('login');
+                    setFieldErrors({});
+                    clearAuthError();
+                    return;
+                  }
+                  void submit();
+                }}
+                onSecondary={
+                  authError.kind === 'offline' || authError.kind === 'waking'
+                    ? () => {
+                        setAuthOpen(false);
+                        router.push('/server');
+                      }
+                    : undefined
+                }
+                secondaryLabel="Change server"
               />
             ) : null}
 
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={t.text3}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              style={[styles.input, { backgroundColor: t.fieldBg, color: t.text, borderColor: t.line }]}
-              accessibilityLabel="Email"
-            />
-
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={t.text3}
-              secureTextEntry
-              style={[styles.input, { backgroundColor: t.fieldBg, color: t.text, borderColor: t.line }]}
-              accessibilityLabel="Password"
-            />
-
-            {authError ? (
-              <Text style={[styles.error, { color: t.danger }]}>{authError}</Text>
+            {mode_ === 'register' ? (
+              <View style={styles.field}>
+                <TextInput
+                  value={name}
+                  onChangeText={(v) => {
+                    setName(v);
+                    if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: undefined }));
+                  }}
+                  placeholder="Your name"
+                  placeholderTextColor={t.text3}
+                  autoCapitalize="words"
+                  editable={!authBusy}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: t.fieldBg,
+                      color: t.text,
+                      borderColor: showFieldError('name') ? t.danger : t.line,
+                    },
+                  ]}
+                  accessibilityLabel="Your name"
+                />
+                {showFieldError('name') ? (
+                  <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.name}</Text>
+                ) : null}
+              </View>
             ) : null}
 
+            <View style={styles.field}>
+              <TextInput
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+                }}
+                placeholder="Email"
+                placeholderTextColor={t.text3}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                editable={!authBusy}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: t.fieldBg,
+                    color: t.text,
+                    borderColor: showFieldError('email') ? t.danger : t.line,
+                  },
+                ]}
+                accessibilityLabel="Email"
+              />
+              {showFieldError('email') ? (
+                <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.email}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.field}>
+              <View
+                style={[
+                  styles.passwordWrap,
+                  {
+                    backgroundColor: t.fieldBg,
+                    borderColor: showFieldError('password') ? t.danger : t.line,
+                  },
+                ]}
+              >
+                <TextInput
+                  value={password}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+                  }}
+                  placeholder="Password"
+                  placeholderTextColor={t.text3}
+                  secureTextEntry={!reveal}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!authBusy}
+                  style={[styles.input, styles.passwordInput, { color: t.text }]}
+                  accessibilityLabel="Password"
+                />
+                <PressableScale
+                  onPress={() => setReveal((v) => !v)}
+                  accessibilityLabel={reveal ? 'Hide password' : 'Show password'}
+                  style={styles.reveal}
+                >
+                  {reveal ? (
+                    <EyeOff size={17} strokeWidth={2.2} color={t.text3} />
+                  ) : (
+                    <Eye size={17} strokeWidth={2.2} color={t.text3} />
+                  )}
+                </PressableScale>
+              </View>
+              {showFieldError('password') ? (
+                <Text style={[styles.fieldError, { color: t.danger }]}>{fieldErrors.password}</Text>
+              ) : null}
+            </View>
+
             <Btn
-              label={mode_ === 'login' ? 'Sign in' : 'Create account'}
+              label={
+                authBusy
+                  ? mode_ === 'login'
+                    ? 'Signing in…'
+                    : 'Creating your space…'
+                  : mode_ === 'login'
+                    ? 'Sign in'
+                    : 'Create account'
+              }
               onPress={() => void submit()}
-              disabled={authBusy}
+              loading={authBusy}
               block
             />
 
             <PressableScale
-              onPress={() => setMode(mode_ === 'login' ? 'register' : 'login')}
+              onPress={() => openAuth(mode_ === 'login' ? 'register' : 'login')}
               accessibilityLabel="Switch mode"
             >
               <Text style={[styles.switch, { color: t.text2 }]}>
@@ -202,9 +384,25 @@ export default function WelcomeScreen() {
               </Text>
             </PressableScale>
 
-            <Text style={[styles.hint, { color: t.text3 }]}>
-              Demo account · sukhdev@duora.app / love1234
-            </Text>
+            <InlineNote
+              text={`Demo account · ${DEMO_EMAIL} / ${DEMO_PASSWORD}`}
+              actionLabel="Use it"
+              onAction={useDemo}
+            />
+
+            <PressableScale
+              onPress={() => {
+                setAuthOpen(false);
+                router.push('/server');
+              }}
+              accessibilityLabel="Change the server address"
+              style={styles.serverLink}
+            >
+              <ServerCog size={14} strokeWidth={2.3} color={t.text3} />
+              <Text style={[styles.serverLinkText, { color: t.text3 }]}>
+                {serverStatus === 'online' ? 'Server settings' : 'Cannot reach the server — fix it'}
+              </Text>
+            </PressableScale>
           </ScrollView>
         </KeyboardAvoidingView>
       </Sheet>
@@ -250,15 +448,41 @@ const styles = StyleSheet.create({
   },
   ctaText: { fontSize: 15.5, fontWeight: '700' },
   ghost: { textAlign: 'center', fontSize: 13, fontWeight: '700', padding: 8 },
+  offline: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 320,
+  },
+  offlineText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  statusRow: { flexDirection: 'row', marginBottom: 14 },
+  field: { marginBottom: 10 },
   input: {
     height: 50,
     borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 15,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
   },
-  error: { fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  passwordWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingRight: 6,
+  },
+  passwordInput: { flex: 1, borderWidth: 0, backgroundColor: 'transparent' },
+  reveal: { padding: 10 },
+  fieldError: { fontSize: 11.5, fontWeight: '600', marginTop: 5, marginLeft: 4 },
   switch: { textAlign: 'center', fontSize: 13, fontWeight: '600', marginTop: 14 },
-  hint: { textAlign: 'center', fontSize: 12, marginTop: 10 },
+  serverLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 16,
+    paddingVertical: 6,
+  },
+  serverLinkText: { fontSize: 12, fontWeight: '600' },
 });
