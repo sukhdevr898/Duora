@@ -2,11 +2,13 @@ import { motion } from 'framer-motion';
 import { Lock, Search } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { HeartOrb, LogoHearts, Sparkle } from '../components/Brand';
+import { useToast } from '../components/Overlay';
 import { partner } from '../data/mock';
 import { useRouter } from '../nav/router';
 
 export function Chats() {
   const { navigate } = useRouter();
+  const { toast } = useToast();
 
   return (
     <div className="screen">
@@ -17,7 +19,12 @@ export function Chats() {
             <LogoHearts size={26} />
             <span className="brand__word">Duora</span>
           </div>
-          <button type="button" className="icon-btn soft press" aria-label="Search chats">
+          <button
+            type="button"
+            className="icon-btn soft press"
+            aria-label="Search chats"
+            onClick={() => toast('Search is coming soon')}
+          >
             <Search size={18} strokeWidth={2.2} />
           </button>
         </div>
