@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db';
 import { ApiError, id, nowIso, asyncHandler } from '../util';
 import { conversationIdFor, partnerOf } from './pairing';
+import { BUS_EVENTS, emit } from '../bus';
 import { findById } from './users';
 import { Router } from 'express';
 import { requireAuth } from '../auth';
@@ -40,6 +41,8 @@ export type ChatMessage = {
   id: string;
   clientMessageId: string;
   conversationId: string;
+  /** Who wrote it - the app turns this into "me" or "partner". */
+  senderId: string;
   from: 'me' | 'partner';
   text: string;
   sticker: string | null;
@@ -200,6 +203,7 @@ export async function listMessages(
       id: m.id,
       clientMessageId: m.client_message_id,
       conversationId: m.conversation_id,
+      senderId: m.sender_id,
       from: fromPartner ? 'partner' : 'me',
       text: m.text,
       sticker: m.sticker_id,
@@ -257,6 +261,7 @@ export async function sendMessage(
     id: messageId,
     clientMessageId: input.clientMessageId,
     conversationId,
+    senderId: userId,
     from: 'me',
     text,
     sticker: input.sticker ?? null,
@@ -270,6 +275,14 @@ export async function sendMessage(
 
 /** Marks the partner's messages as read for this user. */
 export async function markRead(userId: string, conversationId: string): Promise<number> {
+  return (await markReadAndList(userId, conversationId)).length;
+}
+
+/**
+ * Marks the other person's messages as read and returns their ids, so the
+ * realtime layer can tell the sender that their ticks turned blue.
+ */
+export async function markReadAndList(userId: string, conversationId: string): Promise<string[]> {
   await assertMember(userId, conversationId);
   const rows = await db().all<{ id: string }>(
     `SELECT id FROM messages WHERE conversation_id = ? AND sender_id <> ? AND deleted_for_all_at IS NULL`,
@@ -284,7 +297,7 @@ export async function markRead(userId: string, conversationId: string): Promise<
       [row.id, userId, now, now, now],
     );
   }
-  return rows.length;
+  return rows.map((row) => row.id);
 }
 
 export async function toggleReaction(
@@ -383,6 +396,8 @@ chatRouter.post(
   asyncHandler(async (req, res) => {
     const body = req.body as { clientMessageId: string; text: string; sticker?: string | null };
     const message = await sendMessage(req.user!.id, req.params.conversationId, body);
+    // Tell the other phone right away - the app may have sent over HTTP.
+    emit(BUS_EVENTS.MESSAGE_NEW, { conversationId: req.params.conversationId, message });
     res.status(201).json({ message });
   }),
 );
@@ -390,7 +405,15 @@ chatRouter.post(
 chatRouter.post(
   '/conversations/:conversationId/read',
   asyncHandler(async (req, res) => {
-    const count = await markRead(req.user!.id, req.params.conversationId);
+    const messageIds = await markReadAndList(req.user!.id, req.params.conversationId);
+    for (const messageId of messageIds) {
+      emit(BUS_EVENTS.MESSAGE_STATUS, {
+        conversationId: req.params.conversationId,
+        messageId,
+        status: 'read',
+      });
+    }
+    const count = messageIds.length;
     res.json({ marked: count });
   }),
 );

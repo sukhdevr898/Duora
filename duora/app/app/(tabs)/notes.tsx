@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { CardSkeleton } from '../../src/components/Skeleton';
+import { RichText } from '../../src/components/RichText';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, Heart, Plus, Search, Sparkles, Trash2, X } from 'lucide-react-native';
@@ -11,6 +13,7 @@ import { Sticker } from '../../src/components/Sticker';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { useStore } from '../../src/state/store';
 import type { NoteItem } from '../../src/api/types';
+import { resolveMediaUrl } from '../../src/api/client';
 
 const MOODS = ['heart-pink', 'heart-violet', 'heart-lilac', 'heart-peach', 'heart-mint'];
 
@@ -21,6 +24,7 @@ export default function NotesScreen() {
   const { toast } = useToast();
 
   const notes = useStore((s) => s.notes);
+  const dataLoading = useStore((s) => s.dataLoading);
   const loadNotes = useStore((s) => s.loadNotes);
   const createNote = useStore((s) => s.createNote);
 
@@ -128,6 +132,12 @@ export default function NotesScreen() {
           ))}
         </View>
 
+        {dataLoading && filtered.length === 0 ? (
+          <View style={styles.list}>
+            <CardSkeleton count={3} height={92} />
+          </View>
+        ) : null}
+
         <View style={styles.list}>
           {filtered.map((note) => (
             <PressableScale
@@ -138,10 +148,10 @@ export default function NotesScreen() {
             >
               <View style={[styles.card, { backgroundColor: t.card }, shadow('sm')]}>
                 <View style={[styles.thumb, { backgroundColor: t.primarySoft }]}>
-                  {note.image ? <Image source={{ uri: note.image }} style={styles.thumbImg} /> : null}
+                  {note.image ? <Image source={{ uri: resolveMediaUrl(note.image) }} style={styles.thumbImg} /> : null}
                 </View>
                 <View style={styles.cardBody}>
-                  <Text style={[styles.cardTitle, { color: t.text }]}>{note.title}</Text>
+                  <RichText text={note.title} size={14} color={t.text} style={styles.cardTitle} />
                   {note.lines.map((line) => (
                     <Text key={line} style={[styles.cardLine, { color: t.text2 }]}>
                       {line}
@@ -174,7 +184,7 @@ export default function NotesScreen() {
           <View>
             {active.image ? (
               <View style={[styles.detailImage, { backgroundColor: t.primarySoft }, shadow('md')]}>
-                <Image source={{ uri: active.image }} style={styles.detailImageImg} />
+                <Image source={{ uri: resolveMediaUrl(active.image) }} style={styles.detailImageImg} />
               </View>
             ) : null}
             <View style={{ gap: 8 }}>

@@ -19,6 +19,7 @@ import {
   Palette,
   Phone,
   Server,
+  ShieldCheck,
   Sparkles,
   Sun,
   User,
@@ -33,6 +34,9 @@ import { Sheet, useToast } from '../../src/components/Overlay';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { accentList } from '../../src/theme/tokens';
 import { useStore } from '../../src/state/store';
+import { usePrivacy } from '../../src/state/privacy';
+import { APP_VERSION } from '../../src/version';
+import { privacyIconInfo } from '../../src/privacy/icons';
 
 type Row = {
   key: string;
@@ -50,6 +54,7 @@ export default function SettingsScreen() {
 
   const user = useStore((s) => s.user);
   const home = useStore((s) => s.home);
+  const privacyIcon = usePrivacy((s) => s.icon);
   const pairing = useStore((s) => s.pairing);
   const serverStatus = useStore((s) => s.server.status);
   const setThemePreference = useStore((s) => s.setThemePreference);
@@ -61,6 +66,7 @@ export default function SettingsScreen() {
   const [aboutOpen, setAboutOpen] = useState(false);
 
   const accentInfo = accentList.find((a) => a.key === accent) ?? accentList[0];
+  const privacyLabel = privacyIconInfo(privacyIcon).label;
   const partner = home?.partner ?? null;
   const partnerName = partner?.nickname ?? partner?.displayName ?? 'Your person';
 
@@ -73,6 +79,7 @@ export default function SettingsScreen() {
 
   const appRows: Row[] = [
     { key: 'appearance', label: 'Appearance & theme', icon: Palette, value: accentInfo.name },
+    { key: 'privacy-icon', label: 'App icon & privacy', icon: ShieldCheck, value: privacyLabel },
     {
       key: 'server',
       label: 'Server health',
@@ -87,11 +94,12 @@ export default function SettingsScreen() {
     },
     { key: 'language', label: 'Language', icon: Globe2, value: 'English' },
     { key: 'help', label: 'Help & Support', icon: LifeBuoy },
-    { key: 'about', label: 'About Duora', icon: Info, value: 'v2.0.0' },
+    { key: 'about', label: 'About Duora', icon: Info, value: `v${APP_VERSION}` },
   ];
 
   const onRow = (row: Row) => {
     if (row.key === 'appearance') router.push('/appearance');
+    else if (row.key === 'privacy-icon') router.push('/privacy-icon');
     else if (row.key === 'server') router.push('/server');
     else if (row.key === 'pairing') router.push('/pairing');
     else if (row.key === 'about') setAboutOpen(true);
@@ -239,7 +247,7 @@ export default function SettingsScreen() {
           </PressableScale>
 
           <View style={styles.foot}>
-            <Text style={[styles.footBold, { color: t.text2 }]}>Duora v2.0.0</Text>
+            <Text style={[styles.footBold, { color: t.text2 }]}>Duora v{APP_VERSION}</Text>
             <Text style={[styles.footText, { color: t.text3 }]}>
               Just You &amp; Me · made with <RichText text="💜" size={10} /> for two
             </Text>
@@ -319,7 +327,7 @@ export default function SettingsScreen() {
         <View style={{ gap: 10 }}>
           <View style={[styles.group, { backgroundColor: t.card, marginTop: 0 }]}>
             {[
-              { label: 'Version', value: '2.0.0 (Expo · React Native)' },
+              { label: 'Version', value: `${APP_VERSION} (Expo · React Native)` },
               { label: 'Design', value: accentInfo.name },
               { label: 'Mode', value: themePreference === 'system' ? `System · ${mode}` : themePreference },
               { label: 'Made for', value: 'Exactly two people' },

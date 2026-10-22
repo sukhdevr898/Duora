@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Image, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDuoraTheme } from '../theme/ThemeProvider';
+import { resolveMediaUrl } from '../api/client';
 import { ABSOLUTE_FILL } from '../theme/tokens';
 
 type Props = {
@@ -24,6 +25,7 @@ export const Avatar = memo(function Avatar({
 }: Props) {
   const { t } = useDuoraTheme();
   const inner = size - ringWidth * 2;
+  const resolved = resolveMediaUrl(src);
 
   return (
     <View
@@ -48,8 +50,8 @@ export const Avatar = memo(function Avatar({
           backgroundColor: t.surfaceSoft,
         }}
       >
-        {src ? (
-          <Image source={{ uri: src }} style={{ width: inner, height: inner }} resizeMode="cover" />
+        {resolved ? (
+          <Image source={{ uri: resolved }} style={{ width: inner, height: inner }} resizeMode="cover" />
         ) : (
           <LinearGradient
             colors={[t.primary2, t.primary]}

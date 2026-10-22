@@ -26,6 +26,8 @@ export type SettingItem = {
   value?: string;
   icon?: LucideIcon;
   danger?: boolean;
+  /** When set, the row opens this route instead of doing anything else. */
+  route?: string;
 };
 
 export type SettingSection = {
@@ -48,14 +50,14 @@ export const settingSections: Record<string, SettingSection> = {
           { label: 'Display name', kind: 'value', value: 'Sukhdev', icon: User },
           { label: 'Handle', kind: 'value', value: '@sukhdev', icon: Smartphone },
           { label: 'Email', kind: 'value', value: 'sukhdev@duora.app', icon: Mail },
-          { label: 'Phone', kind: 'value', value: '+91 98••• ••42', icon: Phone },
+          { label: 'Phone', kind: 'value', value: 'Not added', icon: Phone },
         ],
       },
       {
         title: 'Your space',
         items: [
           { label: 'Partner', kind: 'value', value: 'ruhi', icon: MessageSquare },
-          { label: 'Matched on', kind: 'value', value: '14 Feb 2024', icon: Info },
+          { label: 'Matched on', kind: 'value', value: 'Not yet', icon: Info },
           { label: 'Love theme', kind: 'value', value: 'Violet Love', icon: Palette },
         ],
       },
@@ -63,7 +65,7 @@ export const settingSections: Record<string, SettingSection> = {
         title: 'Devices',
         items: [
           { label: 'This phone', kind: 'value', value: 'Active now', icon: Smartphone },
-          { label: 'Duora for Web', kind: 'value', value: 'Last used 2h ago', icon: Globe2 },
+          { label: 'Duora for Web', kind: 'value', value: 'Connected', icon: Globe2 },
         ],
       },
     ],
@@ -138,7 +140,7 @@ export const settingSections: Record<string, SettingSection> = {
     groups: [
       {
         items: [
-          { label: 'End-to-end encryption', kind: 'value', value: 'Always on', icon: ShieldCheck },
+          { label: 'Encrypted connection', kind: 'value', value: 'Always on', icon: ShieldCheck },
           { label: 'App lock', kind: 'toggle', detail: 'Require passcode to open' },
           { label: 'Biometric unlock', kind: 'toggle' },
           { label: 'Two-factor sign-in', kind: 'toggle' },
@@ -147,6 +149,7 @@ export const settingSections: Record<string, SettingSection> = {
       {
         title: 'Visibility',
         items: [
+          { label: 'App icon', kind: 'value', detail: 'Disguise Duora on your home screen', icon: ShieldCheck, route: '/privacy-icon' },
           { label: 'Show online status', kind: 'toggle' },
           { label: 'Show last seen', kind: 'toggle' },
           { label: 'Hide read receipts', kind: 'toggle' },
@@ -172,7 +175,7 @@ export const settingSections: Record<string, SettingSection> = {
         items: [
           { label: 'App language', kind: 'value', value: 'English (India)', icon: Globe2 },
           { label: 'Spelling', kind: 'value', value: 'English (US)' },
-          { label: 'Date format', kind: 'value', value: '14 Feb 2024' },
+          { label: 'Date format', kind: 'value', value: 'Today' },
           { label: 'Time format', kind: 'value', value: '24-hour' },
         ],
       },

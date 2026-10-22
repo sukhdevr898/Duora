@@ -7,7 +7,16 @@
  */
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { AlertCircle, CloudOff, Info, Loader2, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react-native';
+import {
+  AlertCircle,
+  CheckCircle2,
+  CloudOff,
+  Info,
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+  WifiOff,
+} from 'lucide-react-native';
 
 import { useDuoraTheme } from '../theme/ThemeProvider';
 import { radii } from '../theme/tokens';
@@ -83,6 +92,31 @@ export const ErrorCard = memo(function ErrorCard({
             ) : null}
           </View>
         ) : null}
+      </View>
+    </View>
+  );
+});
+
+/** The happy path — a soft card that says "that worked". */
+export const SuccessCard = memo(function SuccessCard({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
+  const { t } = useDuoraTheme();
+  return (
+    <View
+      style={[styles.card, { backgroundColor: `${t.mint}14`, borderColor: `${t.mint}3d` }]}
+      accessibilityRole="alert"
+    >
+      <View style={[styles.iconWrap, { backgroundColor: `${t.mint}22` }]}>
+        <CheckCircle2 size={17} strokeWidth={2.4} color={t.mint} />
+      </View>
+      <View style={styles.body}>
+        <Text style={[styles.title, { color: t.text }]}>{title}</Text>
+        <Text style={[styles.message, { color: t.text2 }]}>{text}</Text>
       </View>
     </View>
   );

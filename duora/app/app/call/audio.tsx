@@ -44,39 +44,56 @@ export default function AudioCallScreen() {
 
   const conversations = useStore((s) => s.conversations);
   const home = useStore((s) => s.home);
+  const activeCall = useStore((s) => s.activeCall);
   const startCall = useStore((s) => s.startCall);
   const endCall = useStore((s) => s.endCall);
 
   const [muted, setMuted] = useState(false);
   const [speaker, setSpeaker] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const callId = useRef<string | null>(null);
   const started = useRef(false);
 
   const partnerName =
-    conversations[0]?.partner?.nickname ?? conversations[0]?.partner?.displayName ?? home?.partner?.nickname ?? 'ruhi';
+    conversations[0]?.partner?.nickname ?? conversations[0]?.partner?.displayName ?? home?.partner?.nickname ?? 'your partner';
   const partnerPhoto = conversations[0]?.partner?.avatarUrl ?? home?.partner?.avatarUrl ?? null;
 
+  // The call is real: the server creates the session, the partner's device
+  // starts ringing, and the timer only runs once they pick up.
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // Answering an incoming call already created the session.
+    if (activeCall?.state === 'active') {
+      callId.current = activeCall.callId;
+      return;
+    }
     void startCall('voice').then((id) => {
       callId.current = id;
     });
-    const connect = setTimeout(() => setConnected(true), 2400);
-    return () => clearTimeout(connect);
-  }, [startCall]);
+  }, [startCall, activeCall]);
+
+  const connected = activeCall?.state === 'active';
 
   useEffect(() => {
     if (!connected) return;
+    setSeconds(0);
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, [connected]);
 
+  // A declined call closes the screen on its own.
+  useEffect(() => {
+    if (activeCall && activeCall.state === 'ended') {
+      toast('The call ended');
+      router.back();
+    }
+  }, [activeCall, router, toast]);
+
   const end = () => {
     if (callId.current) void endCall(callId.current);
+    else if (activeCall) void endCall(activeCall.callId);
     router.back();
     toast('Call ended');
   };
@@ -103,62 +120,73 @@ export default function AudioCallScreen() {
       </View>
 
       <View style={[styles.body, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 28 }]}>
-        <Animated.View entering={FadeIn.duration(500)} style={styles.avatar}>
-          <Avatar src={partnerPhoto} size={130} alt={partnerName} />
-        </Animated.View>
+        <View style={styles.topGroup}>
+          <Animated.View entering={FadeIn.duration(500)} style={styles.avatar}>
+            {/* the ring pulses while the call is still ringing */}
+            <PulseRing active={!connected} color="#C9B3FF" />
+            <Avatar src={partnerPhoto} size={130} alt={partnerName} />
+          </Animated.View>
 
-        <Animated.View entering={FadeIn.delay(150).duration(400)} style={{ alignItems: 'center' }}>
-          <Text style={styles.name}>{partnerName}</Text>
-          <Text style={styles.timer}>
-            {format(seconds)}
-            <Text style={styles.state}>{connected ? 'Connected · Voice call' : 'Calling…'}</Text>
-          </Text>
-        </Animated.View>
+          <Animated.View entering={FadeIn.delay(150).duration(400)} style={{ alignItems: 'center' }}>
+            <Text style={styles.name}>{partnerName}</Text>
+            <Text style={styles.timer}>
+              {connected ? format(seconds) : '••:••'}
+              <Text style={styles.state}>
+                {connected ? 'Connected · Voice call' : 'Ringing…'}
+              </Text>
+            </Text>
+            {!connected ? (
+              <Text style={styles.hint}>Waiting for {partnerName} to pick up</Text>
+            ) : null}
+          </Animated.View>
 
-        <View style={styles.waveform}>
-          {bars.map((_, i) => (
-            <WaveBar key={i} index={i} live={connected} />
-          ))}
+          <View style={styles.waveform}>
+            {bars.map((_, i) => (
+              <WaveBar key={i} index={i} live={connected} />
+            ))}
+          </View>
         </View>
 
-        <View style={styles.grid}>
-          <CallControl
-            label={muted ? 'Unmute' : 'Mute'}
-            active={muted}
-            onPress={() => setMuted((v) => !v)}
-            icon={muted ? <MicOff size={23} strokeWidth={2} /> : <Mic size={23} strokeWidth={2} />}
-          />
-          <CallControl
-            label="Keypad"
-            onPress={() => toast('Keypad opened')}
-            icon={<Grid3x3 size={22} strokeWidth={2} />}
-          />
-          <CallControl
-            label="Speaker"
-            active={speaker}
-            onPress={() => setSpeaker((v) => !v)}
-            icon={speaker ? <Volume2 size={23} strokeWidth={2} /> : <VolumeX size={23} strokeWidth={2} />}
-          />
-          <CallControl
-            label="Add Call"
-            onPress={() => toast('Duora keeps it to two — always 💜')}
-            icon={<Plus size={24} strokeWidth={2} />}
-          />
-          <CallControl
-            label="Video Call"
-            onPress={() => router.replace('/call/video')}
-            icon={<Video size={22} strokeWidth={2} />}
-          />
-          <CallControl
-            label="More"
-            onPress={() => setMoreOpen(true)}
-            icon={<MoreHorizontal size={24} strokeWidth={2} />}
-          />
-        </View>
+        <View style={styles.bottomGroup}>
+          <View style={styles.grid}>
+            <CallControl
+              label={muted ? 'Unmute' : 'Mute'}
+              active={muted}
+              onPress={() => setMuted((v) => !v)}
+              icon={muted ? <MicOff size={23} strokeWidth={2} /> : <Mic size={23} strokeWidth={2} />}
+            />
+            <CallControl
+              label="Keypad"
+              onPress={() => toast('The keypad is not part of this build yet')}
+              icon={<Grid3x3 size={22} strokeWidth={2} />}
+            />
+            <CallControl
+              label="Speaker"
+              active={speaker}
+              onPress={() => setSpeaker((v) => !v)}
+              icon={speaker ? <Volume2 size={23} strokeWidth={2} /> : <VolumeX size={23} strokeWidth={2} />}
+            />
+            <CallControl
+              label="Add Call"
+              onPress={() => toast('Duora keeps it to two — always two of us')}
+              icon={<Plus size={24} strokeWidth={2} />}
+            />
+            <CallControl
+              label="Video Call"
+              onPress={() => router.replace('/call/video')}
+              icon={<Video size={22} strokeWidth={2} />}
+            />
+            <CallControl
+              label="More"
+              onPress={() => setMoreOpen(true)}
+              icon={<MoreHorizontal size={24} strokeWidth={2} />}
+            />
+          </View>
 
-        <PressableScale onPress={end} accessibilityLabel="End call" style={styles.endCall}>
-          <PhoneOff size={26} strokeWidth={2.2} color="#fff" />
-        </PressableScale>
+          <PressableScale onPress={end} accessibilityLabel="End call" style={styles.endCall}>
+            <PhoneOff size={26} strokeWidth={2.2} color="#fff" />
+          </PressableScale>
+        </View>
       </View>
 
       <Sheet
@@ -176,7 +204,7 @@ export default function AudioCallScreen() {
               key={key}
               onPress={() => {
                 setMoreOpen(false);
-                toast(`${label} — coming soon`);
+                toast(`${label} is not part of this build yet`);
               }}
               accessibilityLabel={label}
               style={[styles.option, { backgroundColor: t.fieldBg }]}
@@ -250,6 +278,38 @@ function FloatingHeart({
   );
 }
 
+/** A soft ring that breathes around the avatar while the phone is ringing. */
+function PulseRing({ active, color }: { active: boolean; color: string }) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    if (!active) {
+      progress.value = 0;
+      return;
+    }
+    progress.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500, easing: Easing.out(Easing.ease) }),
+        withTiming(0, { duration: 0 }),
+      ),
+      -1,
+      false,
+    );
+  }, [active, progress]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: active ? (1 - progress.value) * 0.55 : 0,
+    transform: [{ scale: 1 + progress.value * 0.55 }],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.pulseRing, { borderColor: color }, style]}
+    />
+  );
+}
+
 function WaveBar({ index, live }: { index: number; live: boolean }) {
   const progress = useSharedValue(0);
   useEffect(() => {
@@ -274,8 +334,18 @@ function WaveBar({ index, live }: { index: number; live: boolean }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   hearts: { ...ABSOLUTE_FILL },
-  body: { flex: 1, alignItems: 'center' },
-  avatar: { marginBottom: 18 },
+  body: { flex: 1, alignItems: 'center', justifyContent: 'space-between' },
+  topGroup: { alignItems: 'center' },
+  bottomGroup: { alignItems: 'center' },
+  avatar: { marginBottom: 18, alignItems: 'center', justifyContent: 'center' },
+  pulseRing: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    borderWidth: 2,
+  },
+  hint: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '600', marginTop: 8 },
   name: { color: '#fff', fontSize: 26, fontWeight: '800', letterSpacing: -0.6 },
   timer: { color: 'rgba(255,255,255,0.72)', fontSize: 14, fontWeight: '600', marginTop: 6 },
   state: { color: 'rgba(233,222,255,0.85)', fontSize: 12, fontWeight: '700', marginLeft: 8 },
@@ -293,7 +363,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 18,
-    marginTop: 34,
+    marginBottom: 26,
     paddingHorizontal: 20,
   },
   control: { alignItems: 'center', width: 76 },
@@ -315,7 +385,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5484d',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 30,
     shadowColor: '#e5484d',
     shadowOpacity: 0.5,
     shadowRadius: 18,

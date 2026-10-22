@@ -18,6 +18,7 @@ import { Sheet, useToast } from '../../src/components/Overlay';
 import { PressableScale } from '../../src/components/ui';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { useStore } from '../../src/state/store';
+import { resolveMediaUrl } from '../../src/api/client';
 
 const format = (total: number) =>
   `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
@@ -31,40 +32,55 @@ export default function VideoCallScreen() {
   const conversations = useStore((s) => s.conversations);
   const home = useStore((s) => s.home);
   const user = useStore((s) => s.user);
+  const activeCall = useStore((s) => s.activeCall);
   const startCall = useStore((s) => s.startCall);
   const endCall = useStore((s) => s.endCall);
 
   const [videoOn, setVideoOn] = useState(true);
   const [muted, setMuted] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const callId = useRef<string | null>(null);
   const started = useRef(false);
 
   const partnerName =
-    conversations[0]?.partner?.nickname ?? conversations[0]?.partner?.displayName ?? home?.partner?.nickname ?? 'ruhi';
+    conversations[0]?.partner?.nickname ?? conversations[0]?.partner?.displayName ?? home?.partner?.nickname ?? 'your partner';
   const partnerPhoto = conversations[0]?.partner?.avatarUrl ?? home?.partner?.avatarUrl ?? null;
   const myPhoto = user?.avatarUrl ?? null;
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // Answering an incoming call already created the session.
+    if (activeCall?.state === 'active') {
+      callId.current = activeCall.callId;
+      return;
+    }
     void startCall('video').then((id) => {
       callId.current = id;
     });
-    const timer = setTimeout(() => setConnected(true), 2200);
-    return () => clearTimeout(timer);
-  }, [startCall]);
+  }, [startCall, activeCall]);
+
+  // The call is live only once the other side picked up.
+  const connected = activeCall?.state === 'active';
 
   useEffect(() => {
     if (!connected) return;
+    setSeconds(0);
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, [connected]);
 
+  useEffect(() => {
+    if (activeCall && activeCall.state === 'ended') {
+      toast('The call ended');
+      router.back();
+    }
+  }, [activeCall, router, toast]);
+
   const end = () => {
     if (callId.current) void endCall(callId.current);
+    else if (activeCall) void endCall(activeCall.callId);
     router.back();
     toast('Video call ended');
   };
@@ -78,7 +94,7 @@ export default function VideoCallScreen() {
         style={StyleSheet.absoluteFill}
       />
       {partnerPhoto ? (
-        <Image source={{ uri: partnerPhoto }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image source={{ uri: resolveMediaUrl(partnerPhoto) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : null}
       <LinearGradient
         colors={['rgba(10,6,22,0.55)', 'rgba(10,6,22,0.15)', 'rgba(10,6,22,0.8)']}
@@ -95,7 +111,7 @@ export default function VideoCallScreen() {
 
       <Animated.View entering={FadeInDown.delay(200).springify().damping(20)} style={styles.pip}>
         {myPhoto ? (
-          <Image source={{ uri: myPhoto }} style={styles.pipImage} resizeMode="cover" />
+          <Image source={{ uri: resolveMediaUrl(myPhoto) }} style={styles.pipImage} resizeMode="cover" />
         ) : (
           <View style={[styles.pipImage, styles.pipFallback]} />
         )}
@@ -106,10 +122,15 @@ export default function VideoCallScreen() {
 
       <Animated.View entering={FadeIn.delay(300)} style={[styles.info, { bottom: insets.bottom + 150 }]}>
         <Text style={styles.infoName}>{partnerName}</Text>
-        <Text style={styles.infoTimer}>{connected ? format(seconds) : 'Connecting…'}</Text>
+        <Text style={styles.infoTimer}>
+          {connected ? format(seconds) : 'Ringing…'}
+        </Text>
         <View style={styles.hdBadge}>
           <Text style={styles.hdText}>HD · {connected ? 'Secure' : 'Establishing'}</Text>
         </View>
+        {!connected ? (
+          <Text style={styles.infoHint}>Waiting for {partnerName} to pick up</Text>
+        ) : null}
       </Animated.View>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 26 }]}>
@@ -220,6 +241,13 @@ const styles = StyleSheet.create({
   pipTagText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
   info: { position: 'absolute', left: 24, alignItems: 'flex-start' },
   infoName: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.6 },
+  infoHint: {
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
   infoTimer: { color: 'rgba(255,255,255,0.78)', fontSize: 13.5, fontWeight: '600', marginTop: 4 },
   hdBadge: {
     marginTop: 8,

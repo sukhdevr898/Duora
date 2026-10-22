@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { CardSkeleton } from '../../src/components/Skeleton';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -35,6 +36,7 @@ export default function CallsScreen() {
   const { toast } = useToast();
 
   const calls = useStore((s) => s.calls);
+  const dataLoading = useStore((s) => s.dataLoading);
   const home = useStore((s) => s.home);
   const loadCalls = useStore((s) => s.loadCalls);
 
@@ -171,6 +173,12 @@ export default function CallsScreen() {
           ))}
         </View>
 
+        {dataLoading && list.length === 0 ? (
+          <View style={styles.list}>
+            <CardSkeleton count={3} height={72} />
+          </View>
+        ) : null}
+
         <View style={styles.list}>
           {list.map((call) => (
             <PressableScale
@@ -200,7 +208,9 @@ export default function CallsScreen() {
                   <Text style={[styles.rowDay, { color: t.text3 }]}>{call.day}</Text>
                 </View>
                 <View style={styles.rowRight}>
-                  <Text style={[styles.rowTime, { color: t.text3 }]}>{call.time}</Text>
+                  <Text style={[styles.rowTime, { color: call.missed ? '#ef4444' : t.text3 }]}>
+                    {call.duration ?? (call.missed ? 'Missed' : '—')}
+                  </Text>
                   <PressableScale
                     onPress={() => setSelected(call)}
                     accessibilityLabel="Call options"

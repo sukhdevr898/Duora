@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect } from 'react';
 import {
   Image,
   RefreshControl,
@@ -29,11 +29,13 @@ import { HeartOrb } from '../../src/components/Brand';
 import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
 import { PressableScale, SectionHead } from '../../src/components/ui';
+import { CardSkeleton } from '../../src/components/Skeleton';
 import { RichText } from '../../src/components/RichText';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { fonts } from '../../src/theme/fonts';
 import { radii } from '../../src/theme/tokens';
 import { useStore } from '../../src/state/store';
+import { resolveMediaUrl } from '../../src/api/client';
 
 const TILES = [
   {
@@ -70,6 +72,56 @@ const TILES = [
   },
 ] as const;
 
+type TileSpec = (typeof TILES)[number];
+
+/**
+ * One quick action tile. Memoised, so the grid does not redraw every time
+ * the store ticks.
+ */
+const HomeTile = memo(function HomeTile({
+  title,
+  sub,
+  icon: Icon,
+  colors,
+  glow,
+  onPress,
+  card,
+  border,
+  textColor,
+  subColor,
+  shadowStyle,
+}: {
+  title: string;
+  sub: string;
+  icon: TileSpec['icon'];
+  colors: readonly [string, string];
+  glow: string;
+  onPress: () => void;
+  card: string;
+  border: string;
+  textColor: string;
+  subColor: string;
+  shadowStyle: object;
+}) {
+  return (
+    <PressableScale onPress={onPress} accessibilityLabel={title} style={styles.tileWrap}>
+      <View style={[styles.tile, { backgroundColor: card, borderColor: border }, shadowStyle]}>
+        <View style={[styles.tileGlow, { backgroundColor: glow }]} pointerEvents="none" />
+        <LinearGradient
+          colors={colors as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.tileIcon}
+        >
+          <Icon size={20} strokeWidth={2.2} color="#fff" />
+        </LinearGradient>
+        <Text style={[styles.tileTitle, { color: textColor }]}>{title}</Text>
+        <Text style={[styles.tileSub, { color: subColor }]}>{sub}</Text>
+      </View>
+    </PressableScale>
+  );
+});
+
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning';
@@ -105,6 +157,9 @@ export default function HomeScreen() {
   const user = useStore((s) => s.user);
   const refreshAll = useStore((s) => s.refreshAll);
   const dataLoading = useStore((s) => s.dataLoading);
+  const partnerOnline = useStore((s) => s.partnerOnline);
+  const partnerTyping = useStore((s) => s.partnerTyping);
+  const realtimeConnected = useStore((s) => s.realtimeConnected);
 
   useFocusEffect(
     useCallback(() => {
@@ -161,8 +216,15 @@ export default function HomeScreen() {
           <Text style={[styles.greetingStrong, { color: t.text }]}>
             My Love <RichText text="💖" size={19} />
           </Text>
-          <Text style={[styles.greetingLine, { color: t.text3 }]}>{dailyLine()}</Text>
+          <RichText text={dailyLine()} size={13} color={t.text3} style={styles.greetingLine} />
         </View>
+
+        {dataLoading && !home ? (
+          <View style={styles.skeletonWrap}>
+            <CardSkeleton count={1} height={104} />
+            <CardSkeleton count={2} height={86} />
+          </View>
+        ) : null}
 
         {linked && partner ? (
           <PressableScale
@@ -202,9 +264,37 @@ export default function HomeScreen() {
                     <Heart size={9} fill="#7A4A00" color="#7A4A00" />
                     <Text style={styles.streakText}>{streak} day streak</Text>
                   </LinearGradient>
+                  <View
+                    style={[
+                      styles.liveBadge,
+                      {
+                        backgroundColor: realtimeConnected ? `${t.mint}22` : t.chipBg,
+                        borderColor: realtimeConnected ? `${t.mint}55` : t.line,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.liveDot,
+                        { backgroundColor: realtimeConnected ? t.mint : t.text3 },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.liveText,
+                        { color: realtimeConnected ? t.mint : t.text3 },
+                      ]}
+                    >
+                      {realtimeConnected ? 'Live' : 'Offline'}
+                    </Text>
+                  </View>
                 </View>
                 <Text style={[styles.heroSub, { color: t.text2 }]}>
-                  {partner.online ? 'Active now · she’s thinking of you' : 'Away for a while'}
+                  {partnerTyping
+                    ? 'typing something sweet…'
+                    : partnerOnline || partner.online
+                      ? 'Active now · she’s thinking of you'
+                      : 'Away for a while'}
                 </Text>
                 <View style={styles.heroQuick}>
                   <View style={[styles.quickAction, { backgroundColor: t.primaryGhost }]}>
@@ -263,36 +353,21 @@ export default function HomeScreen() {
         )}
 
         <View style={styles.grid}>
-          {TILES.map(({ key, title, sub, icon: Icon, colors, glow }) => (
-            <PressableScale
-              key={key}
-              onPress={() => open(key)}
-              accessibilityLabel={title}
-              style={styles.tileWrap}
-            >
-              <View
-                style={[
-                  styles.tile,
-                  { backgroundColor: t.card, borderColor: t.cardBorder },
-                  shadow('sm'),
-                ]}
-              >
-                <View
-                  style={[styles.tileGlow, { backgroundColor: glow }]}
-                  pointerEvents="none"
-                />
-                <LinearGradient
-                  colors={colors}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.tileIcon}
-                >
-                  <Icon size={20} strokeWidth={2.2} color="#fff" />
-                </LinearGradient>
-                <Text style={[styles.tileTitle, { color: t.text }]}>{title}</Text>
-                <Text style={[styles.tileSub, { color: t.text3 }]}>{sub}</Text>
-              </View>
-            </PressableScale>
+          {TILES.map((tile) => (
+            <HomeTile
+              key={tile.key}
+              title={tile.title}
+              sub={tile.sub}
+              icon={tile.icon}
+              colors={tile.colors}
+              glow={tile.glow}
+              onPress={() => open(tile.key)}
+              card={t.card}
+              border={t.cardBorder}
+              textColor={t.text}
+              subColor={t.text3}
+              shadowStyle={shadow('sm')}
+            />
           ))}
         </View>
 
@@ -331,14 +406,18 @@ export default function HomeScreen() {
             >
               <View style={[styles.railCard, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('sm')]}>
                 {note.image ? (
-                  <Image source={{ uri: note.image }} style={styles.railImg} />
+                  <Image source={{ uri: resolveMediaUrl(note.image) }} style={styles.railImg} />
                 ) : (
                   <View style={[styles.railImg, { backgroundColor: t.primarySoft }]} />
                 )}
                 <View style={styles.railBody}>
-                  <Text numberOfLines={2} style={[styles.railTitle, { color: t.text }]}>
-                    {note.title}
-                  </Text>
+                  <RichText
+                    text={note.title}
+                    size={13}
+                    color={t.text}
+                    numberOfLines={2}
+                    style={styles.railTitle}
+                  />
                   <Text style={[styles.railDate, { color: t.text3 }]}>{note.date}</Text>
                 </View>
               </View>
@@ -396,7 +475,7 @@ export default function HomeScreen() {
         <View style={styles.footer}>
           <ShieldCheck size={12} strokeWidth={2.4} color={t.text3} />
           <Text style={[styles.footerText, { color: t.text3 }]}>
-            End-to-end private · just you two
+            Private by default · just you two
           </Text>
         </View>
       </ScrollView>
@@ -488,6 +567,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
   },
+  skeletonWrap: { paddingHorizontal: 18, gap: 12 },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 20,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.4 },
   tileWrap: { width: '48%', marginBottom: 12 },
   tile: {
     borderRadius: 22,

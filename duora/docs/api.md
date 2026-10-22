@@ -163,7 +163,10 @@ Unlinks the pair. The conversation disappears from the chat list; memories stay.
 { "clientMessageId": "uuid", "text": "Love you 💜", "sticker": null }
 ```
 
-→ `{ "message": {…} }`. `clientMessageId` makes the send idempotent.
+→ `{ "message": {…} }`. `clientMessageId` makes the send idempotent. Every message
+carries `senderId`, so the app can tell "me" from "partner" no matter which
+device receives it. Messages sent here are broadcast to the conversation room as
+well — the partner sees them live.
 
 ### `POST /api/v1/chat/conversations/:id/read` → `200` 🔒 → `{ "marked": 3 }`
 
@@ -189,6 +192,15 @@ Unlinks the pair. The conversation disappears from the chat list; memories stay.
 
 ### `GET /api/v1/calls` → `200` 🔒 → `{ "calls": [ … ] }`
 ### `POST /api/v1/calls` → `201` 🔒 — `{ "kind": "voice" | "video" }` → `{ "call": {…} }`
+### `POST /api/v1/calls/:callId/answer` → `200` 🔒 → `{ "call": {…} }`
+### `POST /api/v1/calls/:callId/reject` → `200` 🔒
+
+```json
+{ "outcome": "DECLINED" }
+```
+
+→ `{ "call": {…} }`. `outcome` is `DECLINED` (default) or `MISSED`.
+
 ### `POST /api/v1/calls/:callId/end` → `200` 🔒
 
 ```json

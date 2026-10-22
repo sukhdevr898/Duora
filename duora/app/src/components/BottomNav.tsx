@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -35,17 +35,20 @@ export const BottomNav = memo(function BottomNav({ active, onChange }: Props) {
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
-  const pillStyle = useAnimatedStyle(() => {
+  // The pill springs to the new tab. Animating a shared value (instead of
+  // starting a new spring on every frame) keeps the UI thread free.
+  const target = useMemo(() => {
     const itemWidth = (width - 16) / ITEMS.length;
-    const target = offset.value * itemWidth + (itemWidth - 46) / 2;
-    return {
-      transform: [{ translateX: withSpring(target, { damping: 20, stiffness: 240 }) }],
-    };
-  }, [width]);
+    return index * itemWidth + (itemWidth - 46) / 2;
+  }, [width, index]);
+
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offset.value }],
+  }));
 
   useEffect(() => {
-    offset.value = index;
-  }, [index, offset]);
+    offset.value = withSpring(target, { damping: 20, stiffness: 240 });
+  }, [target, offset]);
 
   return (
     <View
