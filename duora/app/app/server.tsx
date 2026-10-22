@@ -20,15 +20,14 @@ import {
 } from 'lucide-react-native';
 import { PageBackground } from '../src/components/PageBackground';
 import { Btn, PressableScale } from '../src/components/ui';
-import { useToast } from '../src/components/Overlay';
 import { useDuoraTheme } from '../src/theme/ThemeProvider';
 import { useStore } from '../src/state/store';
 import { describeBaseUrl, normalizeBaseUrl } from '../src/api/client';
 
 const STATUS_COPY = {
-  online: { label: 'Connected', sub: 'Everything is synced and secure', color: '#22c55e' },
-  connecting: { label: 'Reconnecting', sub: 'Waking the server — this can take a moment', color: '#f0a93c' },
-  offline: { label: 'Offline', sub: 'Messages will queue and sync automatically', color: '#f4453f' },
+  online: { label: 'API connected', sub: 'The configured Duora server responded to its health check', color: '#239e7a' },
+  connecting: { label: 'Checking connection', sub: 'Waiting for the configured server to respond', color: '#d9912b' },
+  offline: { label: 'API unavailable', sub: 'The configured Duora server did not respond', color: '#e84955' },
 } as const;
 
 function formatUptime(seconds: number) {
@@ -93,14 +92,12 @@ export default function ServerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, shadow } = useDuoraTheme();
-  const { toast } = useToast();
 
   const server = useStore((s) => s.server);
   const health = useStore((s) => s.health);
   const checkServer = useStore((s) => s.checkServer);
   const loadHealth = useStore((s) => s.loadHealth);
   const setAutoReconnect = useStore((s) => s.setAutoReconnect);
-  const simulateOutage = useStore((s) => s.simulateOutage);
   const serverUrl = useStore((s) => s.serverUrl);
   const setServerUrl = useStore((s) => s.setServerUrl);
   const testServerUrl = useStore((s) => s.testServerUrl);
@@ -128,20 +125,19 @@ export default function ServerScreen() {
   const latencyPct = server.status === 'online' ? Math.min(100, Math.max(12, 100 - server.latency / 2)) : 0;
   const circumference = 2 * Math.PI * 52;
 
-  const services = health?.services ?? [
-    { name: 'api', label: 'API gateway', status: 'operational', latencyMs: 0, detail: 'REST · Express' },
-    { name: 'realtime', label: 'Realtime channel', status: 'operational', latencyMs: 0, detail: 'Socket.IO · typing & delivery' },
-    { name: 'database', label: 'Database', status: 'operational', latencyMs: 0, detail: 'SQLite / Postgres' },
-    { name: 'media', label: 'Media relay', status: 'operational', latencyMs: 0, detail: 'Voice & video signalling' },
-  ];
+  const services = (health?.services ?? []).map((service) => service.name === 'media'
+    ? { ...service, label: 'Voice & video media', status: 'degraded' as const, detail: 'Signalling only · no media engine configured' }
+    : service);
 
   const icons = [Server, Radio, Database, PlugZap, BellRing];
 
-  const onCheck = () => {
+  const onCheck = async () => {
     setChecking(true);
-    void checkServer();
-    void loadHealth();
-    setTimeout(() => setChecking(false), 1600);
+    try {
+      await Promise.all([checkServer(), loadHealth()]);
+    } finally {
+      setChecking(false);
+    }
   };
 
   const onTestUrl = async () => {
@@ -196,7 +192,7 @@ export default function ServerScreen() {
             ]}
           />
           <Text style={[styles.pillText, { color: t.text2 }]}>
-            {server.status === 'online' ? 'Live' : server.status === 'connecting' ? 'Syncing' : 'Down'}
+            {server.status === 'online' ? 'API online' : server.status === 'connecting' ? 'Checking' : 'Offline'}
           </Text>
         </View>
       </View>
@@ -255,36 +251,13 @@ export default function ServerScreen() {
             </View>
 
             <View style={styles.actionPair}>
-              <View style={styles.actionSlot}>
-                <Btn
-                  label={checking ? 'Checking…' : 'Check now'}
-                  icon={RefreshCw}
-                  onPress={onCheck}
-                  disabled={checking}
-                  block={false}
-                />
-              </View>
-              <PressableScale
-                onPress={() => {
-                  if (server.status === 'offline' || server.status === 'connecting') {
-                    void checkServer();
-                    toast('Reconnecting…');
-                  } else {
-                    simulateOutage();
-                    toast('Simulating an outage');
-                  }
-                }}
-                accessibilityLabel={server.status === 'offline' ? 'Reconnect to server' : 'Simulate server outage'}
-                style={[styles.outlineBtn, { borderColor: t.lineStrong }]}
-              >
-                <Text style={[styles.outlineText, { color: t.text }]}>
-                  {server.status === 'offline'
-                    ? 'Reconnect'
-                    : server.status === 'connecting'
-                      ? 'Connecting…'
-                      : 'Simulate outage'}
-                </Text>
-              </PressableScale>
+              <Btn
+                label={checking ? 'Checking…' : 'Check again'}
+                icon={RefreshCw}
+                onPress={() => void onCheck()}
+                loading={checking}
+                block
+              />
             </View>
           </View>
 
@@ -292,8 +265,7 @@ export default function ServerScreen() {
             <View style={[styles.banner, { backgroundColor: t.danger + '18', borderColor: t.danger + '44' }]}>
               <Wifi size={15} strokeWidth={2.4} color={t.danger} />
               <Text style={[styles.bannerText, { color: t.text2 }]}>
-                You&apos;re offline. New messages and calls are queued locally and will sync as soon as
-                the server is reachable.
+                The server could not be reached. Sending messages and pairing may be unavailable until the connection returns.
               </Text>
             </View>
           ) : null}
@@ -356,9 +328,9 @@ export default function ServerScreen() {
           <View style={styles.metricGrid}>
             {[
               { label: 'Latency', value: server.status === 'online' ? `${server.latency}` : '—', unit: 'ms' },
-              { label: 'Uptime', value: formatUptime(server.uptimeSeconds), unit: '' },
+              { label: 'Uptime', value: health ? formatUptime(health.uptimeSeconds) : '—', unit: '' },
               { label: 'Region', value: health?.region ?? server.region, unit: '' },
-              { label: 'Last checked', value: timeAgo(server.lastChecked, now), unit: '' },
+              { label: 'Last checked', value: server.lastChecked ? timeAgo(server.lastChecked, now) : 'Not checked', unit: '' },
             ].map((metric, index) => (
               <View
                 key={metric.label}
@@ -386,16 +358,18 @@ export default function ServerScreen() {
             <View style={styles.sparkHead}>
               <View style={styles.sparkTitle}>
                 <Activity size={12} strokeWidth={2.4} color={t.text2} />
-                <Text style={[styles.sparkTitleText, { color: t.text2 }]}>Response time · last minute</Text>
+                <Text style={[styles.sparkTitleText, { color: t.text2 }]}>Recent connection checks</Text>
               </View>
               <View style={styles.sparkLegend}>
                 <View style={[styles.sparkDot, { backgroundColor: copy.color }]} />
-                <Text style={[styles.sparkLegendText, { color: copy.color }]}>
-                  {server.status === 'online' ? 'healthy' : 'degraded'}
-                </Text>
+                <Text style={[styles.sparkLegendText, { color: copy.color }]}>{server.status === 'online' ? 'live' : copy.label}</Text>
               </View>
             </View>
-            <Sparkline data={server.history.length ? server.history : [40, 44, 38]} color={copy.color} />
+            {server.history.length ? (
+              <Sparkline data={server.history} color={copy.color} />
+            ) : (
+              <Text style={[styles.urlHint, { color: t.text3 }]}>No latency samples yet. Check the connection to start collecting them.</Text>
+            )}
           </View>
 
           <View style={styles.sectionHead}>
@@ -406,30 +380,24 @@ export default function ServerScreen() {
           </View>
 
           <View style={[styles.group, { backgroundColor: t.card }, shadow('sm')]}>
-            {services.map((service, index) => {
+            {services.length ? services.map((service, index) => {
               const Icon = icons[index % icons.length];
               const online = service.status === 'operational';
+              const statusColor = online ? t.mint : service.status === 'degraded' ? t.peach : t.danger;
+              const statusLabel = online ? 'Operational' : service.status === 'degraded' ? 'Limited' : 'Unavailable';
               return (
-                <View
-                  key={service.name}
-                  style={[
-                    styles.serviceRow,
-                    index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.line },
-                  ]}
-                >
-                  <View style={[styles.serviceIcon, { backgroundColor: t.primarySoft }]}>
-                    <Icon size={15} strokeWidth={2.2} color={t.primaryDeep} />
-                  </View>
+                <View key={service.name} style={[styles.serviceRow, index > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.line }]}>
+                  <View style={[styles.serviceIcon, { backgroundColor: t.primarySoft }]}><Icon size={15} strokeWidth={2.2} color={t.primaryDeep} /></View>
                   <View style={styles.serviceMeta}>
                     <Text style={[styles.serviceName, { color: t.text }]}>{service.label}</Text>
                     <Text style={[styles.serviceDetail, { color: t.text3 }]}>{service.detail}</Text>
                   </View>
-                  <Text style={[styles.servicePing, { color: online ? t.mint : t.text3 }]}>
-                    {online ? `${service.latencyMs} ms` : '—'}
-                  </Text>
+                  <Text style={[styles.servicePing, { color: statusColor }]}>{statusLabel}</Text>
                 </View>
               );
-            })}
+            }) : (
+              <Text style={[styles.urlHint, { color: t.text3, padding: 14 }]}>Service details are unavailable until the health endpoint responds.</Text>
+            )}
           </View>
 
           <View style={[styles.group, { backgroundColor: t.card, marginTop: 14 }, shadow('sm')]}>
@@ -452,7 +420,7 @@ export default function ServerScreen() {
           </View>
 
           <Text style={[styles.foot, { color: t.text3 }]}>
-            Duora server {server.version} · {health?.region ?? server.region}
+            {health ? `Duora server v${health.version} · ${health.region}` : 'Server version and region unavailable'}
           </Text>
         </View>
       </ScrollView>

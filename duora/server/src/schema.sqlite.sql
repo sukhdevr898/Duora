@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS presence (
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id               TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   theme                 TEXT NOT NULL DEFAULT 'system',
-  accent                TEXT NOT NULL DEFAULT 'violet',
+  accent                TEXT NOT NULL DEFAULT 'rose',
   love_mode             INTEGER NOT NULL DEFAULT 0,
   heart_motion          INTEGER NOT NULL DEFAULT 1,
   glass                 INTEGER NOT NULL DEFAULT 1,

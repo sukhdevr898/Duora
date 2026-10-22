@@ -1,9 +1,6 @@
 /**
- * Privacy store — the launcher icon the app wears.
- *
- * Duora is a private app: the icon on the home screen can be a clock, the
- * weather, a calculator or a notepad. The choice is remembered on the device
- * and applied to the splash screen and the in-app brand mark.
+ * Stores the user's preferred decorative icon for the in-app splash/brand
+ * treatment. This does not change the Android launcher icon.
  */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';

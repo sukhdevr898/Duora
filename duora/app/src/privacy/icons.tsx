@@ -1,12 +1,7 @@
 /**
- * Privacy icons.
- *
- * Duora is a private app, so the launcher icon can be swapped for something
- * innocent — a clock, the weather, a calculator, a notepad — while the
- * Duora hearts stay one tap away inside the app.
- *
- * Every icon is drawn by hand with react-native-svg (no image assets, no
- * font dependency) so it stays crisp on every Android density.
+ * Decorative icons used by the in-app splash selector. These choices do not
+ * alter the Android launcher icon. Each mark is drawn with react-native-svg,
+ * avoiding emoji and keeping edges crisp across screen densities.
  */
 import { memo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';

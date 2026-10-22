@@ -10,7 +10,7 @@
  * breathing glow. Nothing re-renders while it plays.
  */
 import { memo, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { Heart } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { AppIcon, type PrivacyIconKey } from '../privacy/icons';
 import { useDuoraTheme } from '../theme/ThemeProvider';
@@ -144,8 +145,22 @@ export const SplashScreen = memo(function SplashScreen({
   return (
     <Animated.View
       pointerEvents={visible ? 'auto' : 'none'}
-      style={[styles.root, { backgroundColor: dark ? '#0F0B1B' : '#FBF8FF' }, fadeStyle]}
+      style={[styles.root, { backgroundColor: dark ? '#0F0B1B' : t.bg }, fadeStyle]}
     >
+      <Image
+        source={require('../../assets/images/note-1.jpg')}
+        resizeMode="cover"
+        style={StyleSheet.absoluteFill}
+        accessibilityIgnoresInvertColors
+      />
+      <LinearGradient
+        colors={dark
+          ? ['rgba(15,11,27,0.62)', 'rgba(15,11,27,0.48)', 'rgba(15,11,27,0.82)']
+          : ['rgba(255,248,250,0.28)', 'rgba(255,238,244,0.5)', 'rgba(255,226,236,0.88)']}
+        locations={[0, 0.52, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       {/* soft light behind the icon */}
       <View style={styles.backdrop} pointerEvents="none">
         <Svg width="100%" height="100%">
@@ -194,7 +209,7 @@ export const SplashScreen = memo(function SplashScreen({
           <Animated.View style={wordmarkStyle}>
             <Text style={[styles.wordmark, { color: t.text }]}>Duora</Text>
           </Animated.View>
-          <Text style={[styles.tagline, { color: t.text3 }]}>Just You & Me</Text>
+          <Text style={[styles.tagline, { color: dark ? t.text2 : '#75475a' }]}>Always Together</Text>
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(420).duration(600)} style={styles.heartRow}>
@@ -212,7 +227,7 @@ export const SplashScreen = memo(function SplashScreen({
             <Pulse key={i} delay={i * 220} color={t.primary} />
           ))}
         </View>
-        <Text style={[styles.footerText, { color: t.text3 }]}>Two hearts. One private space.</Text>
+        <Text style={[styles.footerText, { color: dark ? t.text2 : "#75475a" }]}>Bringing you closer</Text>
         <View style={[styles.track, { backgroundColor: t.line }]}>
           <Animated.View style={[styles.fill, { backgroundColor: t.primary }, progressStyle]} />
         </View>

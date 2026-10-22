@@ -109,7 +109,6 @@ type Store = {
   server: ServerInfo;
   checkServer: () => Promise<void>;
   setAutoReconnect: (value: boolean) => void;
-  simulateOutage: () => void;
   health: { status: string; latencyMs: number; uptimeSeconds: number; services: { name: string; label: string; status: string; latencyMs: number; detail: string }[]; database: { driver: string; status: string; latencyMs: number }; version: string; region: string; checks: { name: string; ok: boolean; detail: string }[] } | null;
   loadHealth: () => Promise<void>;
 
@@ -121,7 +120,7 @@ type Store = {
   createCode: () => Promise<string | null>;
   acceptCode: (code: string) => Promise<boolean>;
   acceptToken: (token: string) => Promise<boolean>;
-  unlink: () => Promise<void>;
+  unlink: () => Promise<boolean>;
 
   /* ---------------- realtime ---------------- */
   realtimeConnected: boolean;
@@ -146,18 +145,18 @@ type Store = {
   notes: NoteItem[];
   calls: CallLogItem[];
   dataLoading: boolean;
-  loadHome: () => Promise<void>;
-  loadConversations: () => Promise<void>;
+  loadHome: () => Promise<boolean>;
+  loadConversations: () => Promise<boolean>;
   loadQuickReplies: () => Promise<void>;
-  loadMessages: (conversationId: string) => Promise<void>;
-  loadNotes: () => Promise<void>;
-  createNote: (input: { title: string; body?: string; category?: string; mood?: string | null }) => Promise<void>;
-  loadCalls: () => Promise<void>;
+  loadMessages: (conversationId: string) => Promise<boolean>;
+  loadNotes: () => Promise<boolean>;
+  createNote: (input: { title: string; body?: string; category?: string; mood?: string | null }) => Promise<boolean>;
+  loadCalls: () => Promise<boolean>;
   startCall: (kind: 'voice' | 'video') => Promise<string | null>;
   endCall: (callId: string) => Promise<void>;
-  sendMessage: (conversationId: string, text: string, sticker?: string | null) => Promise<void>;
+  sendMessage: (conversationId: string, text: string, sticker?: string | null) => Promise<boolean>;
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
-  refreshAll: () => Promise<void>;
+  refreshAll: () => Promise<boolean>;
 };
 
 const defaultServer: ServerInfo = {
@@ -165,9 +164,9 @@ const defaultServer: ServerInfo = {
   latency: 0,
   history: [],
   uptimeSeconds: 0,
-  region: 'Singapore · ap-southeast',
+  region: 'Unavailable',
   apiBase: getApiBaseUrl(),
-  version: 'v3.0.0',
+  version: 'Unknown',
   lastChecked: 0,
   autoReconnect: true,
   error: null,
@@ -319,7 +318,7 @@ export const useStore = create<Store>((set, get) => ({
 
   /* ---------------- appearance ---------------- */
   themePreference: 'light',
-  accent: 'violet',
+  accent: 'rose',
   loveMode: false,
   heartMotion: true,
   glass: true,
@@ -350,7 +349,7 @@ export const useStore = create<Store>((set, get) => ({
         const parsed = JSON.parse(raw) as PersistedTheme;
         set({
           themePreference: parsed.themePreference ?? 'light',
-          accent: parsed.accent ?? 'violet',
+          accent: parsed.accent ?? 'rose',
           loveMode: parsed.loveMode ?? false,
           heartMotion: parsed.heartMotion ?? true,
           glass: parsed.glass ?? true,
@@ -457,13 +456,6 @@ export const useStore = create<Store>((set, get) => ({
 
   setAutoReconnect: (value) => {
     set((prev) => ({ server: { ...prev.server, autoReconnect: value } }));
-  },
-
-  /** Mirrors the web build's "Simulate outage" — the heartbeat reconnects. */
-  simulateOutage: () => {
-    set((prev) => ({
-      server: { ...prev.server, status: 'offline', latency: 0, error: 'Simulated outage' },
-    }));
   },
 
   health: null,
@@ -582,8 +574,9 @@ export const useStore = create<Store>((set, get) => ({
       const status = await api.unlink();
       set({ pairing: status });
       await get().refreshAll();
+      return true;
     } catch {
-      /* keep current state */
+      return false;
     }
   },
 
@@ -723,8 +716,9 @@ export const useStore = create<Store>((set, get) => ({
   loadHome: async () => {
     try {
       set({ home: await api.home() });
+      return true;
     } catch {
-      /* keep last known payload */
+      return false;
     }
   },
 
@@ -732,8 +726,9 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const { conversations } = await api.conversations();
       set({ conversations });
+      return true;
     } catch {
-      /* keep last known list */
+      return false;
     }
   },
 
@@ -751,8 +746,9 @@ export const useStore = create<Store>((set, get) => ({
       const { messages } = await api.messages(conversationId);
       set({ messages, messagesFor: conversationId });
       realtime.markRead(conversationId);
+      return true;
     } catch {
-      /* keep last known list */
+      return false;
     }
   },
 
@@ -760,8 +756,9 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const { notes } = await api.notes();
       set({ notes });
+      return true;
     } catch {
-      /* keep last known list */
+      return false;
     }
   },
 
@@ -769,8 +766,10 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const { note } = await api.createNote(input);
       set((prev) => ({ notes: [note, ...prev.notes] }));
+      return true;
     } catch {
       /* the sheet stays open so the text is not lost */
+      return false;
     }
   },
 
@@ -778,8 +777,9 @@ export const useStore = create<Store>((set, get) => ({
     try {
       const { calls } = await api.calls();
       set({ calls });
+      return true;
     } catch {
-      /* keep last known list */
+      return false;
     }
   },
 
@@ -828,21 +828,24 @@ export const useStore = create<Store>((set, get) => ({
         .toLowerCase()
         .replace(/\s/g, ' ')
         .replace(/^0/, ''),
-      status: 'sent',
+      status: 'pending',
       reactions: [],
     };
-    set((prev) => ({ messages: [...prev.messages, optimistic] }));
+    set((prev) => ({
+      messages: prev.messagesFor === conversationId ? [...prev.messages, optimistic] : [optimistic],
+      messagesFor: conversationId,
+    }));
     try {
       const { message } = await api.sendMessage(conversationId, clientMessageId, text, sticker);
       set((prev) => ({
         messages: prev.messages.map((m) => (m.clientMessageId === clientMessageId ? message : m)),
       }));
+      return true;
     } catch {
       set((prev) => ({
-        messages: prev.messages.map((m) =>
-          m.clientMessageId === clientMessageId ? { ...m, status: 'sent' } : m,
-        ),
+        messages: prev.messages.filter((message) => message.clientMessageId !== clientMessageId),
       }));
+      return false;
     }
   },
 
@@ -853,21 +856,22 @@ export const useStore = create<Store>((set, get) => ({
         messages: prev.messages.map((m) => (m.id === messageId ? { ...m, reactions } : m)),
       }));
     } catch {
-      /* ignore — reaction stays local-only */
+      /* Preserve the server-backed reaction state when the request fails. */
     }
   },
 
   refreshAll: async () => {
     set({ dataLoading: true });
-    await Promise.all([
+    const [homeLoaded] = await Promise.all([
       get().loadHome(),
       get().loadConversations(),
       get().loadQuickReplies(),
       get().loadNotes(),
       get().loadCalls(),
       get().checkServer(),
-    ]);
+    ] as const);
     set({ dataLoading: false });
+    return homeLoaded;
   },
 }));
 

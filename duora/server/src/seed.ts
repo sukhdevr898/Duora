@@ -256,7 +256,7 @@ export async function seed(options: { quiet?: boolean } = {}): Promise<void> {
 
   /* ---------------- settings ---------------- */
   await db().run(
-    `UPDATE user_settings SET theme = 'light', accent = 'violet', love_mode = 0, updated_at = ?
+    `UPDATE user_settings SET theme = 'light', accent = 'rose', love_mode = 0, updated_at = ?
       WHERE user_id = ?`,
     [now, sukhdev.id],
   );
