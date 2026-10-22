@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import {
   ArrowRight,
@@ -20,7 +22,7 @@ import {
   ServerCog,
   UserRound,
 } from 'lucide-react-native';
-import { BrandWordmark } from '../src/components/BrandWordmark';
+import { LogoLockup } from '../src/components/BrandWordmark';
 import { Btn, PressableScale, Segmented } from '../src/components/ui';
 import { Field, FieldAction } from '../src/components/Field';
 import { ErrorCard, StatusPill } from '../src/components/Feedback';
@@ -121,20 +123,27 @@ export default function WelcomeScreen() {
       >
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={[
-            styles.content,
-            { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 24 },
-          ]}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeIn.duration(550)} style={styles.brandBlock}>
-            <BrandWordmark size={34} />
-            <Text style={[styles.tagline, { color: t.text3 }]}>Always Together</Text>
-            <View style={[styles.brandHeart, { backgroundColor: t.primarySoft }]}>
-              <Heart size={14} fill={t.primary} color={t.primary} />
-            </View>
-          </Animated.View>
+          <View style={[styles.hero, { height: 320 + insets.top }]}>
+            <Image
+              source={require('../assets/images/duora-couple-portrait.jpg')}
+              resizeMode="cover"
+              style={styles.heroArt}
+              accessibilityIgnoresInvertColors
+            />
+            <LinearGradient
+              colors={['rgba(255,247,250,0.04)', 'rgba(255,244,249,0.08)', 'rgba(255,241,247,0.9)']}
+              locations={[0, 0.58, 1]}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <Animated.View entering={FadeIn.duration(550)} style={[styles.brandBlock, { paddingTop: insets.top + 20 }]}>
+              <LogoLockup size={44} />
+            </Animated.View>
+          </View>
 
           <Animated.View
             entering={FadeInDown.duration(550).delay(90)}
@@ -287,19 +296,20 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, gap: 18 },
-  brandBlock: { alignItems: 'center', paddingTop: 2, paddingBottom: 4 },
-  tagline: { marginTop: 3, fontSize: 11, fontWeight: '700', letterSpacing: 2.6, textTransform: 'uppercase' },
-  brandHeart: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  content: { flexGrow: 1, justifyContent: 'flex-start', paddingHorizontal: 0 },
+  hero: { width: '100%', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  heroArt: { position: 'absolute', top: -220, left: 0, right: 0, width: '100%', height: 680 },
+  brandBlock: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'flex-start' },
   card: {
-    width: '100%',
+    width: '92%',
     maxWidth: 480,
     alignSelf: 'center',
+    marginTop: -30,
     borderRadius: 30,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 21,
     shadowColor: '#9d345c',
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 28,
     shadowOffset: { width: 0, height: 12 },
     elevation: 7,
@@ -313,6 +323,6 @@ const styles = StyleSheet.create({
   switchLine: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 17 },
   switchText: { fontSize: 12.5, fontWeight: '600' },
   switchAction: { fontSize: 13, fontWeight: '800' },
-  serverLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 6 },
+  serverLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 12, marginHorizontal: 18 },
   serverLinkText: { fontSize: 11.5, fontWeight: '600' },
 });

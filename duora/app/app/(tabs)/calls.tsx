@@ -18,7 +18,6 @@ import {
   X,
 } from 'lucide-react-native';
 import { Avatar } from '../../src/components/Avatar';
-import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
 import { Chip, IconButton, PressableScale } from '../../src/components/ui';
 import { Sheet } from '../../src/components/Overlay';
@@ -81,7 +80,7 @@ export default function CallsScreen() {
     <View style={styles.root}>
       <PageBackground />
       <View style={[styles.appbar, { paddingTop: insets.top + 10 }]}>
-        <Text style={[styles.appbarTitle, { color: t.text }]}>Calls</Text>
+        <Text style={[styles.appbarTitle, { color: t.text }]}>Call logs</Text>
         <View style={styles.appbarActions}>
           <IconButton
             icon={searching ? X : Search}
@@ -93,7 +92,6 @@ export default function CallsScreen() {
               setQuery('');
             }}
           />
-          <ConnectionPill compact />
         </View>
       </View>
 

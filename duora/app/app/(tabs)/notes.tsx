@@ -7,7 +7,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CalendarDays, Heart, Plus, Search, Sparkles, X } from 'lucide-react-native';
-import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
 import { Btn, Chip, IconButton, PressableScale } from '../../src/components/ui';
 import { Sheet, useToast } from '../../src/components/Overlay';
@@ -103,7 +102,6 @@ export default function NotesScreen() {
       <View style={[styles.appbar, { paddingTop: insets.top + 10 }]}>
         <Text style={[styles.appbarTitle, { color: t.text }]}>Notes</Text>
         <View style={styles.appbarActions}>
-          <ConnectionPill compact />
           <IconButton
             icon={searching ? X : Search}
             variant={searching ? 'soft' : 'ghost'}
@@ -163,8 +161,8 @@ export default function NotesScreen() {
         </View>
 
         {loadingNotes && filtered.length === 0 ? (
-          <View style={styles.list}>
-            <CardSkeleton count={3} height={92} />
+          <View style={{ paddingBottom: 24 }}>
+            <CardSkeleton count={4} height={76} />
           </View>
         ) : null}
 
@@ -185,19 +183,26 @@ export default function NotesScreen() {
               accessibilityLabel={note.title}
               style={styles.cardWrap}
             >
-              <View style={[styles.card, { backgroundColor: t.card }, shadow('sm')]}>
+              <View style={[styles.card, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('xs')]}>
                 <View style={[styles.thumb, { backgroundColor: t.primarySoft }]}>
-                  {note.image ? <Image source={{ uri: resolveMediaUrl(note.image) }} style={styles.thumbImg} /> : null}
+                  {note.image ? (
+                    <Image
+                      source={{ uri: resolveMediaUrl(note.image) }}
+                      resizeMode="cover"
+                      style={styles.thumbImg}
+                      accessibilityIgnoresInvertColors
+                    />
+                  ) : (
+                    <Sticker id={MOODS.includes(note.mood ?? '') ? note.mood! : MOODS[0]} size={34} />
+                  )}
                 </View>
                 <View style={styles.cardBody}>
-                  <RichText text={note.title} size={14} color={t.text} style={styles.cardTitle} />
-                  {note.lines.map((line) => (
-                    <Text key={line} style={[styles.cardLine, { color: t.text2 }]}>
-                      {line}
-                    </Text>
-                  ))}
-                  <Text style={[styles.cardDate, { color: t.text3 }]}>{note.date}</Text>
+                  <RichText text={note.title} size={13.5} color={t.text} style={styles.cardTitle} numberOfLines={1} />
+                  {note.lines[0] ? (
+                    <Text style={[styles.cardLine, { color: t.text2 }]} numberOfLines={1}>{note.lines[0]}</Text>
+                  ) : null}
                 </View>
+                <Text style={[styles.cardDate, { color: t.text3 }]} numberOfLines={1}>{note.date}</Text>
               </View>
             </PressableScale>
           ))}
@@ -332,22 +337,15 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
   chipsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingBottom: 12 },
-  list: { paddingHorizontal: 18, paddingBottom: 24, gap: 10 },
-  cardWrap: {},
-  card: {
-    flexDirection: 'row',
-    gap: 13,
-    paddingVertical: 10,
-    paddingLeft: 10,
-    paddingRight: 12,
-    borderRadius: 22,
-  },
-  thumb: { width: 78, height: 78, borderRadius: 16, overflow: 'hidden' },
+  list: { paddingHorizontal: 18, paddingBottom: 24, gap: 9 },
+  cardWrap: { borderRadius: 20 },
+  card: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 11, paddingVertical: 10, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth },
+  thumb: { width: 46, height: 46, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImg: { width: '100%', height: '100%' },
-  cardBody: { flex: 1, minWidth: 0, paddingVertical: 4, paddingRight: 4 },
-  cardTitle: { fontSize: 14, fontWeight: '800', marginBottom: 3 },
-  cardLine: { fontSize: 12.5, fontWeight: '500', lineHeight: 17 },
-  cardDate: { fontSize: 10.5, fontWeight: '700', marginTop: 5 },
+  cardBody: { flex: 1, minWidth: 0, gap: 3 },
+  cardTitle: { fontSize: 13.5, lineHeight: 18, fontWeight: '800' },
+  cardLine: { fontSize: 10.5, lineHeight: 14, fontWeight: '500' },
+  cardDate: { maxWidth: 75, fontSize: 9.5, lineHeight: 13, fontWeight: '600', textAlign: 'right' },
   writeTogether: {
     marginTop: 4,
     flexDirection: 'row',

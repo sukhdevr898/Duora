@@ -148,7 +148,7 @@ export const SplashScreen = memo(function SplashScreen({
       style={[styles.root, { backgroundColor: dark ? '#0F0B1B' : t.bg }, fadeStyle]}
     >
       <Image
-        source={require('../../assets/images/note-1.jpg')}
+        source={require('../../assets/images/duora-couple-portrait.jpg')}
         resizeMode="cover"
         style={StyleSheet.absoluteFill}
         accessibilityIgnoresInvertColors

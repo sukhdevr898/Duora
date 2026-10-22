@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import { BottomNav, type TabKey } from '../../src/components/BottomNav';
 
 const ROUTES: Record<TabKey, string> = {
-  home: '/home',
+  home: '/(tabs)',
   chat: '/chat',
   calls: '/calls',
   notes: '/notes',
@@ -14,7 +14,16 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const active = (pathname.split('/').filter(Boolean).pop() ?? 'home') as TabKey;
+  const segments = pathname.split('/').filter(Boolean);
+  const active: TabKey = segments.includes('chat')
+    ? 'chat'
+    : segments.includes('calls')
+      ? 'calls'
+      : segments.includes('notes')
+        ? 'notes'
+        : segments.includes('settings')
+          ? 'settings'
+          : 'home';
 
   return (
     <Tabs

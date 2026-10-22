@@ -12,19 +12,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronRight,
+  Bell,
   Clock3,
   Heart,
   MessageCircle,
   NotebookPen,
   Phone,
+  Plus,
   Server,
   type LucideIcon,
 } from 'lucide-react-native';
 import { Avatar } from '../../src/components/Avatar';
 import { BrandWordmark } from '../../src/components/BrandWordmark';
-import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
-import { PressableScale } from '../../src/components/ui';
+import { IconButton, PressableScale } from '../../src/components/ui';
 import { CardSkeleton } from '../../src/components/Skeleton';
 import { RichText } from '../../src/components/RichText';
 import { ErrorCard } from '../../src/components/Feedback';
@@ -145,7 +146,13 @@ export default function HomeScreen() {
           <Text style={[styles.tagline, { color: t.text3 }]}>Always Together</Text>
         </View>
         <View style={styles.headActions}>
-          <ConnectionPill compact />
+          <IconButton
+            icon={Bell}
+            variant="soft"
+            size={38}
+            accessibilityLabel="Notification settings"
+            onPress={() => router.push('/settings/notifications')}
+          />
           <PressableScale onPress={() => router.push('/settings/profile')} accessibilityLabel="Open your profile">
             <Avatar src={user?.avatarUrl ?? null} size={38} alt={user?.displayName ?? 'Your profile'} />
           </PressableScale>
@@ -192,11 +199,11 @@ export default function HomeScreen() {
                 style={styles.heroImage}
               />
             ) : (
-              <LinearGradient
-                colors={['#ffc4d8', '#f47aa4', '#d44378']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              <Image
+                source={require('../../assets/images/duora-sunset-couple.jpg')}
+                resizeMode="cover"
                 style={styles.heroImage}
+                accessibilityIgnoresInvertColors
               />
             )}
             <LinearGradient
@@ -257,8 +264,8 @@ export default function HomeScreen() {
           <>
           <View style={styles.sectionHead}>
           <View>
-            <Text style={[styles.sectionTitle, { color: t.text }]}>Saved memories</Text>
-            <Text style={[styles.sectionSub, { color: t.text3 }]}>Notes saved to your Duora account</Text>
+            <Text style={[styles.sectionTitle, { color: t.text }]}>Our moments</Text>
+            <Text style={[styles.sectionSub, { color: t.text3 }]}>Your saved notes and memories</Text>
           </View>
           <PressableScale onPress={() => router.push('/notes')} accessibilityLabel="See all memories" style={styles.seeAll}>
             <Text style={[styles.seeAllText, { color: t.primary }]}>See all</Text>
@@ -283,6 +290,16 @@ export default function HomeScreen() {
                 </View>
               </PressableScale>
             ))}
+            <PressableScale
+              onPress={() => router.push('/notes')}
+              accessibilityLabel="Add a memory"
+              style={[styles.addMomentCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}
+            >
+              <View style={[styles.addMomentIcon, { backgroundColor: t.primarySoft }]}>
+                <Plus size={20} strokeWidth={2.4} color={t.primary} />
+              </View>
+              <Text style={[styles.addMomentLabel, { color: t.text2 }]}>Add</Text>
+            </PressableScale>
           </ScrollView>
         ) : (
           <PressableScale onPress={() => router.push('/notes')} accessibilityLabel="Create your first memory" style={[styles.emptyMoments, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
@@ -325,7 +342,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
   headActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tagline: { marginTop: -2, marginLeft: 35, fontSize: 8.5, fontWeight: '800', letterSpacing: 2.1, textTransform: 'uppercase' },
+  tagline: { marginTop: -2, marginLeft: 35, fontSize: 9, fontWeight: '600', letterSpacing: 0.25 },
   scroll: { flex: 1, marginTop: 4 },
   scrollContent: { paddingBottom: 10 },
   greeting: { paddingHorizontal: 21, paddingTop: 15, paddingBottom: 15 },
@@ -334,7 +351,7 @@ const styles = StyleSheet.create({
   greetingSub: { fontSize: 13, lineHeight: 18, fontWeight: '500', marginTop: 2 },
   skeletonWrap: { paddingHorizontal: 18, gap: 12 },
   heroWrap: { marginHorizontal: 18, marginBottom: 16 },
-  hero: { height: 208, borderRadius: 26, overflow: 'hidden', justifyContent: 'space-between' },
+  hero: { height: 224, borderRadius: 26, overflow: 'hidden', justifyContent: 'space-between' },
   heroImage: { ...ABSOLUTE_FILL, width: '100%', height: '100%' },
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15 },
   heroLive: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 99, backgroundColor: 'rgba(40,18,30,0.38)', paddingHorizontal: 11, paddingVertical: 7 },
@@ -363,6 +380,9 @@ const styles = StyleSheet.create({
   momentImage: { width: '100%', height: 92 },
   momentMeta: { paddingHorizontal: 9, paddingTop: 8, paddingBottom: 9 },
   momentDate: { fontSize: 9.5, fontWeight: '600', marginTop: 4 },
+  addMomentCard: { width: 88, minHeight: 132, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', gap: 7, padding: 8 },
+  addMomentIcon: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  addMomentLabel: { fontSize: 10, fontWeight: '700' },
   emptyMoments: { marginHorizontal: 18, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13 },
   emptyMomentIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   emptyMomentTitle: { fontSize: 12.5, fontWeight: '800' },
