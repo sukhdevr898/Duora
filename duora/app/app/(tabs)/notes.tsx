@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CardSkeleton } from '../../src/components/Skeleton';
+import { ErrorCard } from '../../src/components/Feedback';
 import { RichText } from '../../src/components/RichText';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarDays, Heart, Plus, Search, Sparkles, Trash2, X } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { CalendarDays, Heart, Plus, Search, Sparkles, X } from 'lucide-react-native';
 import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
 import { Btn, Chip, IconButton, PressableScale } from '../../src/components/ui';
@@ -24,7 +26,6 @@ export default function NotesScreen() {
   const { toast } = useToast();
 
   const notes = useStore((s) => s.notes);
-  const dataLoading = useStore((s) => s.dataLoading);
   const loadNotes = useStore((s) => s.loadNotes);
   const createNote = useStore((s) => s.createNote);
 
@@ -36,11 +37,21 @@ export default function NotesScreen() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [mood, setMood] = useState(MOODS[0]);
+  const [loadingNotes, setLoadingNotes] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  const reloadNotes = useCallback(async () => {
+    setLoadingNotes(true);
+    setLoadError(false);
+    const loaded = await loadNotes();
+    setLoadError(!loaded);
+    setLoadingNotes(false);
+  }, [loadNotes]);
 
   useFocusEffect(
     useCallback(() => {
-      void loadNotes();
-    }, [loadNotes]),
+      void reloadNotes();
+    }, [reloadNotes]),
   );
 
   const filtered = useMemo(() => {
@@ -65,7 +76,7 @@ export default function NotesScreen() {
       toast('Give your memory a title');
       return;
     }
-    await createNote({
+    const saved = await createNote({
       title: title.trim(),
       body: body
         .split('\n')
@@ -76,10 +87,14 @@ export default function NotesScreen() {
       category: category === 'All' ? 'ALL' : category === 'Plans' ? 'PLAN' : 'DAYS',
       mood,
     });
+    if (!saved) {
+      toast('Could not save this memory. Check your connection and try again.', 'error');
+      return;
+    }
     setTitle('');
     setBody('');
     setAdding(false);
-    toast('Memory saved');
+    toast('Memory saved', 'success');
   };
 
   return (
@@ -110,6 +125,21 @@ export default function NotesScreen() {
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+        <PressableScale onPress={() => setAdding(true)} accessibilityLabel="Add a memory" style={styles.addBanner}>
+          <LinearGradient colors={[t.primary, t.pink]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <View style={styles.addBannerIcon}><Plus size={18} strokeWidth={2.8} color={t.primary} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.addBannerTitle}>Add a memory</Text>
+            <Text style={styles.addBannerSub}>Save a little piece of your story</Text>
+          </View>
+          <Plus size={19} strokeWidth={2.5} color="#fff" />
+        </PressableScale>
+
+        {loadError && notes.length > 0 ? (
+          <View style={styles.loadWarning}>
+            <ErrorCard error={{ kind: 'offline', title: 'Could not refresh memories', message: 'Showing the memories already saved on this device.', action: 'Retry' }} onRetry={() => void reloadNotes()} />
+          </View>
+        ) : null}
         {searching ? (
           <View style={styles.searchWrap}>
             <View style={[styles.searchbar, { backgroundColor: t.chipBg, borderColor: t.line }]}>
@@ -132,13 +162,22 @@ export default function NotesScreen() {
           ))}
         </View>
 
-        {dataLoading && filtered.length === 0 ? (
+        {loadingNotes && filtered.length === 0 ? (
           <View style={styles.list}>
             <CardSkeleton count={3} height={92} />
           </View>
         ) : null}
 
         <View style={styles.list}>
+          {filtered.length === 0 && !loadingNotes ? loadError && notes.length === 0 ? (
+            <ErrorCard error={{ kind: 'offline', title: 'Memories unavailable', message: 'We could not load your notes. Check the connection and try again.', action: 'Retry' }} onRetry={() => void reloadNotes()} />
+          ) : (
+            <View style={[styles.emptyCard, { backgroundColor: t.card, borderColor: t.line }]}>
+              <Heart size={22} color={t.primary} strokeWidth={2} />
+              <Text style={[styles.emptyTitle, { color: t.text }]}>{query.trim() ? 'No matching memories' : 'No memories here yet'}</Text>
+              <Text style={[styles.emptyText, { color: t.text3 }]}>{query.trim() ? 'Try another search term.' : 'Add the first note to your Duora account.'}</Text>
+            </View>
+          ) : null}
           {filtered.map((note) => (
             <PressableScale
               key={note.id}
@@ -165,11 +204,11 @@ export default function NotesScreen() {
 
           <PressableScale
             onPress={() => router.push('/chat')}
-            accessibilityLabel="Write one together"
+            accessibilityLabel="Talk about a memory"
             style={[styles.writeTogether, { backgroundColor: t.primaryGhost, borderColor: t.primaryGhost }]}
           >
             <Sparkles size={15} strokeWidth={2.2} color={t.primary} />
-            <Text style={[styles.writeTogetherText, { color: t.primary }]}>Write one together</Text>
+            <Text style={[styles.writeTogetherText, { color: t.primary }]}>Talk about a memory</Text>
           </PressableScale>
         </View>
       </ScrollView>
@@ -178,7 +217,7 @@ export default function NotesScreen() {
         visible={Boolean(active)}
         onClose={() => setActive(null)}
         title={active?.title}
-        subtitle={active ? `${active.date} · saved in our space` : undefined}
+        subtitle={active ? `${active.date} · saved to your account` : undefined}
       >
         {active ? (
           <View>
@@ -190,32 +229,12 @@ export default function NotesScreen() {
             <View style={{ gap: 8 }}>
               {active.lines.map((line) => (
                 <View key={line} style={styles.detailLine}>
-                  <Heart size={13} strokeWidth={2.6} color="#a78bfa" fill="#c4b0ff" />
-                  <Text style={[styles.detailLineText, { color: '#3a3157' }]}>{line}</Text>
+                  <Heart size={13} strokeWidth={2.6} color={t.primary} fill={t.primarySoft} />
+                  <Text style={[styles.detailLineText, { color: t.text }]}>{line}</Text>
                 </View>
               ))}
             </View>
-            <View style={styles.detailActions}>
-              <Btn
-                label="Save to memories"
-                icon={Sparkles}
-                onPress={() => {
-                  setActive(null);
-                  toast('Added to our memories');
-                }}
-                style={{ flex: 1 }}
-              />
-              <PressableScale
-                onPress={() => {
-                  setActive(null);
-                  toast('Note deleted');
-                }}
-                accessibilityLabel="Delete note"
-                style={styles.deleteBtn}
-              >
-                <Trash2 size={19} strokeWidth={2.2} color="#e5484d" />
-              </PressableScale>
-            </View>
+
           </View>
         ) : null}
       </Sheet>
@@ -224,7 +243,7 @@ export default function NotesScreen() {
         visible={adding}
         onClose={() => setAdding(false)}
         title="New memory"
-        subtitle="A little page of your story, kept just for the two of you."
+        subtitle="A note saved to your Duora account."
       >
         <View style={{ gap: 12 }}>
           <TextInput
@@ -293,6 +312,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   scroll: { flex: 1 },
+  loadWarning: { marginHorizontal: 18, marginBottom: 10 },
+  addBanner: { minHeight: 76, marginHorizontal: 18, marginTop: 6, marginBottom: 14, paddingHorizontal: 15, borderRadius: 21, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  addBannerIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  addBannerTitle: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  addBannerSub: { color: 'rgba(255,255,255,0.82)', fontSize: 10.5, fontWeight: '600', marginTop: 3 },
+  emptyCard: { minHeight: 150, borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, alignItems: 'center', justifyContent: 'center', padding: 20, gap: 7 },
+  emptyTitle: { fontSize: 15, fontWeight: '800' },
+  emptyText: { fontSize: 11.5, fontWeight: '500', textAlign: 'center' },
   searchWrap: { paddingHorizontal: 18, paddingBottom: 12 },
   searchbar: {
     flexDirection: 'row',

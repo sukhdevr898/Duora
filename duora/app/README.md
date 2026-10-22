@@ -1,119 +1,64 @@
 # Duora — Android app (Expo + React Native + TypeScript)
 
-> Two hearts. One private space.
-
-The premium, private two-person communication app — a 1:1 port of the React UI in
-[`../ui`](../ui) (same layout, typography, icons, themes and motion) talking to the
-Duora Node API. Every screen is filled with real database data; there are no mock
-records anywhere.
+Duora is a paired messaging app built with Expo Router and React Native. The current interface uses the blush/rose visual system and sends account, pairing, chat, notes, and call-signalling requests to the Duora Node API. User-facing content is loaded from the API; the client does not ship fallback conversations or demo accounts.
 
 ## Stack
 
 - Expo SDK 57 · React Native 0.86 · React 19 · TypeScript (strict)
 - Expo Router (file-based routes)
 - REST + Socket.IO against the Duora API (`/api/v1/*`)
-- `expo-secure-store` for the refresh token, `expo-camera` for QR pairing,
-  `react-native-svg` for the hand-drawn hearts, stickers and QR code
-- `lucide-react-native` icons, Google Fonts (Plus Jakarta Sans + Great Vibes)
+- `expo-secure-store` for refresh tokens, `expo-camera` for QR pairing
+- `react-native-svg` for hand-drawn hearts, stickers, and QR codes
+- Lucide icons, Plus Jakarta Sans, and Great Vibes
 
 ## Quick start
 
 ```bash
-cd app
-npm install
-npx expo start                 # open in Expo Go on Android
+cd duora/app
+npm ci
+npx expo start
 ```
 
-The app is pre-configured for the live deployment at **https://duora.onrender.com**.
-To point it somewhere else (a laptop on your LAN, a staging server) set
-`EXPO_PUBLIC_API_URL` in `.env` — see [`.env.example`](./.env.example) — and restart
-the bundler.
+Open the project in Expo Go on Android, or use an Android development build for native modules. The default API is **https://duora.onrender.com**. To use a different server, copy `.env.example` to `.env`, set `EXPO_PUBLIC_API_URL`, then restart Expo. Never put server secrets in the app bundle.
 
-Set `EXPO_PUBLIC_API_URL="relative"` when the API is served from the same
-origin (reverse proxy, or the browser preview) — every request then goes to
-`/api/v1/*` on the current host.
+When a reverse proxy serves the API on the same origin, set `EXPO_PUBLIC_API_URL=relative`; the app then uses `/api/v1/*` on that origin.
 
-### Changing the server from inside the app
+### Change the server in the app
 
-The bundled address is only the **default**. Open **Settings → Server health →
-Server address** and you can:
+Open **Settings → Server health → Server address**. Test an address before saving it. Saving a new server drops the old session because refresh tokens belong to one server.
 
-* **Test** an address — the app talks to `/api/v1/health` and tells you the
-  round-trip time, the server version and the database it uses.
-* **Save & connect** — the address is stored on the device and used from then
-  on. The old session is dropped (tokens belong to one server).
+## Feature status
 
-That is the quickest way out of a broken or sleeping Render deployment without
-rebuilding the APK.
+- **Available:** account sign-in/sign-up, one-to-one pairing, QR/code exchange, server-backed chat and notes, realtime typing/presence, delivery/read status, and call signalling.
+- **Not configured:** push notifications, an audio/video media engine, end-to-end encryption, and an in-app lock.
+- **Icon selector:** changes the in-app splash/brand treatment only; it does not change the Android launcher icon in this build.
+- Call screens can send or receive real signalling requests, but they do **not** transmit microphone or camera media.
 
-Start the backend first if you run against a local server
-(see [`../server/README.md`](../server/README.md)):
-
-```bash
-cd ../server && npm install && npm run seed && npm run dev
-```
-
-Sign in with the seeded account **sukhdev@duora.app / love1234**
-(partner: **ruhi@duora.app / love1234**). The sign-in sheet has a **Use it**
-button that fills the demo details for you.
-
-## Signing in and signing up
-
-The auth sheet is deliberately loud about problems, because a silent failure
-is the worst kind:
-
-| Situation | What the user sees |
-| --- | --- |
-| Empty / invalid field | Inline message under the field, red border |
-| Wrong email or password | *That did not match* — *Email or password is wrong* |
-| Email already registered | *Already taken* with a **Sign in instead** button |
-| Server asleep / booting | *Server is waking up* with **Wake it up** and **Change server** |
-| No route to the server | *Cannot reach the server* with **Try again** and **Change server** |
-| Server error (5xx) | *The server stumbled* — try again in a moment |
-
-Every failure keeps the sheet open with the typed values intact, the button
-turns into a spinner while the request is in flight, and the sheet shows a
-live **Connected · host** / **Cannot reach host** pill so it is always obvious
-whether the app can talk to the backend.
-
-## Scripts
+## Useful scripts
 
 | Command | Purpose |
 | --- | --- |
-| `npm start` | Expo dev server |
-| `npm run android` | Open on Android |
-| `npm run dev-client` | Start for a custom development build |
-| `npm run prebuild` | Generate the native `android/` project |
+| `npm start` | Start Expo |
+| `npm run android` | Run the Android app |
+| `npm run prebuild` | Generate the Android native project |
 | `npm run typecheck` | Strict TypeScript check |
-| `npm run export:web` | Static web build (used for visual QA) |
-| `npm run doctor` | Verify dependency alignment with the Expo SDK |
-| `npm run eas:dev` | EAS development APK |
+| `npm run export:web` | Export the web build for UI QA |
+| `npm run doctor` | Check Expo dependency alignment |
+| `npm run eas:dev` | Build an EAS development APK |
 
 ## Project map
 
 ```
 app/
-├── app/                 Expo Router routes (screens stay thin)
-│   ├── (tabs)/          index · chat · notes · calls · settings
-│   ├── appearance.tsx   theme + accent + love mode
-│   ├── server.tsx       live server health
-│   ├── pairing/         6-character code, QR show, QR scan
-│   ├── conversation/    chat thread with stickers & reactions
-│   ├── call/            audio + video call screens
-│   └── settings/        sub-sections (account, chat, privacy, …)
-├── src/
-│   ├── api/             typed REST client (client.ts) + models (types.ts)
-│   ├── state/           single store: session, chat, notes, calls, pairing
-│   ├── components/      Duora design system (buttons, sheets, avatars, …)
-│   │                    Feedback.tsx = error cards, status pills, inline notes
-│   ├── theme/           tokens, fonts, ThemeProvider
-│   └── data/            settings section catalogue
-├── assets/              brand icons, fonts, sounds
-└── app.json             Expo config (extra.apiUrl = production API)
+├── app/                 Expo Router routes
+│   ├── (tabs)/          Home · chat · notes · calls · settings
+│   ├── pairing/         Pairing code and QR scanner
+│   ├── conversation/    Realtime thread with stickers and reactions
+│   ├── call/            Signalling-only call request screens
+│   └── settings/        Account, notification, privacy, and help details
+├── src/api/             Typed REST client and API models
+├── src/state/           Session, chat, notes, calls, and pairing state
+├── src/components/      Reusable UI, feedback, and illustration components
+├── src/theme/           Color tokens and theme provider
+└── assets/              Brand art and fonts
 ```
-
-## Configuration
-
-All public runtime config uses `EXPO_PUBLIC_*` variables (see
-[`.env.example`](./.env.example)). Only the API base URL is needed — the WebSocket
-endpoint is derived from it. No secrets belong in the app bundle.

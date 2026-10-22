@@ -14,13 +14,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   ArrowLeft,
-  Camera,
+  CircleAlert,
+  Clock3,
   Check,
   CheckCheck,
-  Image as ImageIcon,
-  Mic,
   MoreVertical,
-  Paperclip,
   Phone,
   Plus,
   Send,
@@ -35,12 +33,11 @@ import { Sticker, stickers } from '../../src/components/Sticker';
 import { Sheet, useToast } from '../../src/components/Overlay';
 import { PressableScale } from '../../src/components/ui';
 import { TypingBubble } from '../../src/components/TypingBubble';
+import { ErrorCard } from '../../src/components/Feedback';
 import { ChatSkeleton } from '../../src/components/Skeleton';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { useStore } from '../../src/state/store';
 import type { ChatMessage } from '../../src/api/types';
-
-const FALLBACK_REPLIES = ['Miss you ✨', 'Call me 💖', 'Good night 🌙'];
 
 export default function ConversationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,12 +47,12 @@ export default function ConversationScreen() {
   const { toast } = useToast();
 
   const messages = useStore((s) => s.messages);
+  const messagesFor = useStore((s) => s.messagesFor);
   const conversations = useStore((s) => s.conversations);
   const server = useStore((s) => s.server);
   const partnerTyping = useStore((s) => s.partnerTyping);
   const partnerOnline = useStore((s) => s.partnerOnline);
   const realtimeConnected = useStore((s) => s.realtimeConnected);
-  const quickReplies = useStore((s) => s.quickReplies);
   const loadMessages = useStore((s) => s.loadMessages);
   const sendMessage = useStore((s) => s.sendMessage);
   const toggleReaction = useStore((s) => s.toggleReaction);
@@ -65,6 +62,7 @@ export default function ConversationScreen() {
   const [stickerOpen, setStickerOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversationId = String(id ?? '');
@@ -74,22 +72,34 @@ export default function ConversationScreen() {
     [conversations, conversationId],
   );
 
-  useEffect(() => {
-    if (!conversationId) return;
+  const loadThread = useCallback(async () => {
+    if (!conversationId) {
+      setLoading(false);
+      setLoadError(true);
+      return;
+    }
     setLoading(true);
-    void loadMessages(conversationId).finally(() => setLoading(false));
+    setLoadError(false);
+    const loaded = await loadMessages(conversationId);
+    setLoadError(!loaded);
+    setLoading(false);
   }, [conversationId, loadMessages]);
 
   useEffect(() => {
-    if (messages.length) {
+    void loadThread();
+  }, [loadThread]);
+
+  const threadMessages = messagesFor === conversationId ? messages : [];
+
+  useEffect(() => {
+    if (threadMessages.length) {
       const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
       return () => clearTimeout(timer);
     }
-  }, [messages.length]);
+  }, [threadMessages.length]);
 
   const partnerName = conversation?.partner?.nickname ?? conversation?.partner?.displayName ?? 'partner';
   const partnerPhoto = conversation?.partner?.avatarUrl ?? null;
-  const replies = quickReplies.length ? quickReplies : FALLBACK_REPLIES;
 
   const send = useCallback(
     async (text: string) => {
@@ -97,17 +107,22 @@ export default function ConversationScreen() {
       if (!value) return;
       setDraft('');
       setTyping(conversationId, false);
-      await sendMessage(conversationId, value);
+      const sent = await sendMessage(conversationId, value);
+      if (!sent) {
+        setDraft((current) => current.trim() ? current : value);
+        toast('Message was not sent. Check your connection and try again.', 'error');
+      }
     },
-    [conversationId, sendMessage, setTyping],
+    [conversationId, sendMessage, setTyping, toast],
   );
 
   const sendSticker = useCallback(
     async (stickerId: string) => {
       setStickerOpen(false);
-      await sendMessage(conversationId, '', stickerId);
+      const sent = await sendMessage(conversationId, '', stickerId);
+      if (!sent) toast('Sticker was not sent. Check your connection and try again.', 'error');
     },
-    [conversationId, sendMessage],
+    [conversationId, sendMessage, toast],
   );
 
   /** Tells the partner you are writing — throttled to one event per second. */
@@ -150,9 +165,7 @@ export default function ConversationScreen() {
           <PressableScale onPress={() => router.back()} accessibilityLabel="Back">
             <ArrowLeft size={20} strokeWidth={2.4} color={t.text} />
           </PressableScale>
-          <PressableScale onPress={() => toast(`${partnerName} is online`)} accessibilityLabel="Partner profile">
-            <Avatar src={partnerPhoto} size={36} online={partnerOnline} alt={partnerName} />
-          </PressableScale>
+          <Avatar src={partnerPhoto} size={40} online={partnerOnline} alt={partnerName} />
           <View style={styles.who}>
             <Text style={[styles.name, { color: t.text }]}>{partnerName}</Text>
             <Text
@@ -166,21 +179,21 @@ export default function ConversationScreen() {
                 : partnerOnline
                   ? 'Online'
                   : realtimeConnected
-                    ? 'Away'
-                    : 'Offline'}
+                    ? 'Offline'
+                    : 'Status unavailable'}
             </Text>
           </View>
           <View style={styles.actions}>
             <PressableScale
               onPress={() => router.push('/call/audio')}
-              accessibilityLabel="Voice call"
+              accessibilityLabel="Voice call request"
               style={[styles.iconBtn, { backgroundColor: t.fieldBg }]}
             >
               <Phone size={16} strokeWidth={2.3} color={t.text} />
             </PressableScale>
             <PressableScale
               onPress={() => router.push('/call/video')}
-              accessibilityLabel="Video call"
+              accessibilityLabel="Video call request"
               style={[styles.iconBtn, { backgroundColor: t.fieldBg }]}
             >
               <Video size={17} strokeWidth={2.3} color={t.text} />
@@ -200,20 +213,28 @@ export default function ConversationScreen() {
             <WifiOff size={13} strokeWidth={2.4} color={t.danger} />
             <Text style={[styles.offlineText, { color: t.text2 }]}>
               {server.status === 'offline'
-                ? 'Offline — messages will send when you reconnect'
-                : 'Reconnecting…'}
+                ? 'Server offline — messages cannot send right now'
+                : 'Reconnecting to Duora…'}
             </Text>
           </View>
         ) : null}
 
         {/* messages */}
-        {loading && messages.length === 0 ? (
+        {loadError && threadMessages.length > 0 ? (
+          <View style={styles.loadWarning}>
+            <ErrorCard
+              error={{ kind: 'offline', title: 'Could not refresh messages', message: 'Showing the messages already on this device.', action: 'Retry' }}
+              onRetry={() => void loadThread()}
+            />
+          </View>
+        ) : null}
+        {loading && threadMessages.length === 0 ? (
           <ChatSkeleton rows={7} />
         ) : (
           <FlatList
             ref={listRef}
             style={styles.flex}
-            data={messages}
+            data={threadMessages}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}
@@ -224,7 +245,7 @@ export default function ConversationScreen() {
             removeClippedSubviews
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
             ListHeaderComponent={
-              messages.length ? (
+              threadMessages.length ? (
                 <View style={styles.dayChipWrap}>
                   <View style={[styles.dayChip, { backgroundColor: t.fieldBg }]}>
                     <Text style={[styles.dayChipText, { color: t.text3 }]}>{dayLabel(messages[0]?.createdAt)}</Text>
@@ -236,32 +257,19 @@ export default function ConversationScreen() {
               <TypingBubble visible={partnerTyping} />
             }
             ListEmptyComponent={
-              <View style={styles.empty}>
-                <Text style={[styles.emptyText, { color: t.text3 }]}>
-                  Say hello — the first word is always the hardest.
-                </Text>
-              </View>
+              loadError ? (
+                <ErrorCard
+                  error={{ kind: 'offline', title: 'Messages unavailable', message: 'We could not load this conversation. Check the connection and try again.', action: 'Retry' }}
+                  onRetry={() => void loadThread()}
+                />
+              ) : (
+                <View style={styles.empty}>
+                  <Text style={[styles.emptyText, { color: t.text3 }]}>Say hello — the first word is always the hardest.</Text>
+                </View>
+              )
             }
           />
         )}
-
-        {/* quick replies */}
-        <View style={styles.quickRow}>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={replies}
-            keyExtractor={(item) => item}
-            contentContainerStyle={{ gap: 8, paddingHorizontal: 14 }}
-            renderItem={({ item }) => (
-              <PressableScale onPress={() => void send(item)} accessibilityLabel={`Quick reply ${item}`}>
-                <View style={[styles.quickChip, { backgroundColor: t.surface, borderColor: t.cardBorder }]}>
-                  <RichText text={item} size={12.5} color={t.text} />
-                </View>
-              </PressableScale>
-            )}
-          />
-        </View>
 
         {/* composer */}
         <View
@@ -290,9 +298,6 @@ export default function ConversationScreen() {
             />
             <Pressable onPress={() => setStickerOpen(true)} accessibilityLabel="Stickers">
               <Smile size={19} strokeWidth={2} color={t.text3} />
-            </Pressable>
-            <Pressable onPress={() => toast('Photos are not part of this build yet')} accessibilityLabel="Attach file">
-              <Paperclip size={18} strokeWidth={2} color={t.text3} />
             </Pressable>
           </View>
 
@@ -333,25 +338,21 @@ export default function ConversationScreen() {
         visible={attachOpen}
         onClose={() => setAttachOpen(false)}
         title="Share something"
-        subtitle="Photos, voice notes and memories stay between the two of you."
+        subtitle="Media uploads are not enabled in this version. Stickers and call requests are available."
       >
         <View style={styles.attachGrid}>
           {[
-            { icon: ImageIcon, label: 'Photos' },
-            { icon: Camera, label: 'Camera' },
-            { icon: Mic, label: 'Voice note' },
-            { icon: StickerIcon, label: 'Sticker' },
-            { icon: Phone, label: 'Call' },
-            { icon: Video, label: 'Video call' },
-          ].map(({ icon: Icon, label }) => (
+            { icon: StickerIcon, label: 'Sticker', action: 'sticker' },
+            { icon: Phone, label: 'Voice request', action: 'audio' },
+            { icon: Video, label: 'Video request', action: 'video' },
+          ].map(({ icon: Icon, label, action }) => (
             <PressableScale
               key={label}
               onPress={() => {
                 setAttachOpen(false);
-                if (label === 'Call') router.push('/call/audio');
-                else if (label === 'Video call') router.push('/call/video');
-                else if (label === 'Sticker') setStickerOpen(true);
-                else toast(`${label} is not part of this build yet`);
+                if (action === 'audio') router.push('/call/audio');
+                else if (action === 'video') router.push('/call/video');
+                else setStickerOpen(true);
               }}
               accessibilityLabel={label}
               style={[styles.attachTile, { backgroundColor: t.fieldBg }]}
@@ -412,15 +413,14 @@ const MessageRow = memo(function MessageRow({
               {item.time}
             </Text>
             {mine ? (
-              item.status === 'sent' ? (
+              item.status === 'pending' ? (
+                <Clock3 size={11} strokeWidth={2.2} color="rgba(255,255,255,0.8)" />
+              ) : item.status === 'sent' ? (
                 <Check size={11} strokeWidth={3} color="rgba(255,255,255,0.85)" />
+              ) : item.status === 'delivered' || item.status === 'read' ? (
+                <CheckCheck size={12} strokeWidth={2.6} color="rgba(255,255,255,0.95)" opacity={item.status === 'read' ? 1 : 0.65} />
               ) : (
-                <CheckCheck
-                  size={12}
-                  strokeWidth={2.6}
-                  color="rgba(255,255,255,0.95)"
-                  opacity={item.status === 'read' ? 1 : 0.65}
-                />
+                <CircleAlert size={12} strokeWidth={2.2} color="#ffd3d8" />
               )
             ) : null}
           </View>
@@ -473,6 +473,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   iconBtn: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   iconBtnGhost: { width: 32, height: 36, alignItems: 'center', justifyContent: 'center' },
+  loadWarning: { paddingHorizontal: 12, paddingTop: 8 },
   offline: {
     flexDirection: 'row',
     alignItems: 'center',

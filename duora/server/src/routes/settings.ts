@@ -44,7 +44,7 @@ export async function getSettings(userId: string): Promise<Settings> {
   if (!row) {
     return {
       theme: 'system',
-      accent: 'violet',
+      accent: 'rose',
       loveMode: false,
       heartMotion: true,
       glass: true,

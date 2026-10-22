@@ -28,9 +28,9 @@ export const LogoHearts = memo(function LogoHearts({ size = 30 }: LogoProps) {
             <Stop offset="100%" stopColor="#D8558F" />
           </LinearGradient>
           <LinearGradient id="logoViolet" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0%" stopColor="#A98BFF" />
-            <Stop offset="45%" stopColor="#7C51F5" />
-            <Stop offset="100%" stopColor="#4B28C9" />
+            <Stop offset="0%" stopColor="#FF9FC4" />
+            <Stop offset="45%" stopColor="#E84081" />
+            <Stop offset="100%" stopColor="#A91E5B" />
           </LinearGradient>
           <LinearGradient id="logoShine" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0%" stopColor="#fff" stopOpacity="0.75" />

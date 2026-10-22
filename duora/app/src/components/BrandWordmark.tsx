@@ -17,9 +17,9 @@ export const BrandWordmark = memo(function BrandWordmark({
       <Svg width={width ?? size * 3.1} height={size * 1.35}>
         <Defs>
           <LinearGradient id="wordmarkGrad" x1="0" y1="0" x2="1" y2="0.4">
-            <Stop offset="0%" stopColor="#4a2bd0" />
-            <Stop offset="46%" stopColor="#7f4ff5" />
-            <Stop offset="100%" stopColor="#c46ae0" />
+            <Stop offset="0%" stopColor="#35141f" />
+            <Stop offset="46%" stopColor="#df3d7b" />
+            <Stop offset="100%" stopColor="#f58bb8" />
           </LinearGradient>
         </Defs>
         <SvgText
@@ -45,10 +45,10 @@ export const LogoLockup = memo(function LogoLockup({ size = 46 }: { size?: numbe
       <Svg width={size * 3.1} height={size * 1.25}>
         <Defs>
           <LinearGradient id="lockupGrad" x1="0" y1="0" x2="1" y2="0.3">
-            <Stop offset="0%" stopColor="#4a2bd0" />
-            <Stop offset="42%" stopColor="#7347f0" />
-            <Stop offset="72%" stopColor="#a25be8" />
-            <Stop offset="100%" stopColor="#c85c9e" />
+            <Stop offset="0%" stopColor="#35141f" />
+            <Stop offset="42%" stopColor="#ee4b8c" />
+            <Stop offset="72%" stopColor="#f26da1" />
+            <Stop offset="100%" stopColor="#ff9cc0" />
           </LinearGradient>
         </Defs>
         <SvgText
@@ -62,7 +62,7 @@ export const LogoLockup = memo(function LogoLockup({ size = 46 }: { size?: numbe
           Duora
         </SvgText>
       </Svg>
-      <Text style={styles.tagline}>Just You &amp; Me</Text>
+      <Text style={styles.tagline}>Always Together</Text>
     </View>
   );
 });
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#7a719a',
+    color: '#8d6d7b',
     letterSpacing: 0.3,
     marginTop: -2,
   },

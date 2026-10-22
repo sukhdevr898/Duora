@@ -3,7 +3,7 @@
  *
  * • `ErrorCard`  — a friendly, human readable failure with a recovery button
  * • `StatusPill` — the "connected / waking up / offline" dot used in headers
- * • `InlineNote` — a soft hint line (demo account, tips, …)
+ * • `InlineNote` — a soft hint line for small tips
  */
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -152,7 +152,7 @@ export const StatusPill = memo(function StatusPill({
   );
 });
 
-/** A soft hint line — used for the demo account and small tips. */
+/** A soft hint line for a short, non-interactive note. */
 export const InlineNote = memo(function InlineNote({
   text,
   actionLabel,

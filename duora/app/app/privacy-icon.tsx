@@ -42,7 +42,7 @@ export default function PrivacyIconScreen() {
         <View style={styles.body}>
           {/* a little home screen so the icon reads the way it will look */}
           <View style={[styles.preview, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('md')]}>
-            <Text style={[styles.previewLabel, { color: t.text3 }]}>ON YOUR HOME SCREEN</Text>
+            <Text style={[styles.previewLabel, { color: t.text3 }]}>IN-APP SPLASH PREVIEW</Text>
             <View style={styles.previewIcon}>
               <AppIcon icon={icon} size={92} />
             </View>
@@ -50,7 +50,7 @@ export default function PrivacyIconScreen() {
             <View style={[styles.previewNote, { backgroundColor: t.primaryGhost }]}>
               <ShieldCheck size={13} strokeWidth={2.3} color={t.primary} />
               <Text style={[styles.previewNoteText, { color: t.text2 }]}>
-                The splash screen uses this icon too — nobody sees the hearts until you open the app.
+                This choice appears on Duora’s in-app splash. Android launcher icon disguise is not available in this build.
               </Text>
             </View>
           </View>

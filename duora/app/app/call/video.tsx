@@ -1,272 +1,123 @@
-import { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import {
-  ArrowLeft,
-  Camera,
-  CameraOff,
-  Mic,
-  MicOff,
-  MoreHorizontal,
-  PhoneOff,
-  SwitchCamera,
-} from 'lucide-react-native';
-import { Sheet, useToast } from '../../src/components/Overlay';
+import { ArrowLeft, Camera, Info, MessageCircle, PhoneOff, Video } from 'lucide-react-native';
+import { Avatar } from '../../src/components/Avatar';
+import { PageBackground } from '../../src/components/PageBackground';
 import { PressableScale } from '../../src/components/ui';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
 import { useStore } from '../../src/state/store';
-import { resolveMediaUrl } from '../../src/api/client';
-
-const format = (total: number) =>
-  `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 
 export default function VideoCallScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { t } = useDuoraTheme();
-  const { toast } = useToast();
-
+  const { t, shadow } = useDuoraTheme();
   const conversations = useStore((s) => s.conversations);
   const home = useStore((s) => s.home);
-  const user = useStore((s) => s.user);
   const activeCall = useStore((s) => s.activeCall);
-  const startCall = useStore((s) => s.startCall);
   const endCall = useStore((s) => s.endCall);
-
-  const [videoOn, setVideoOn] = useState(true);
-  const [muted, setMuted] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const callId = useRef<string | null>(null);
-  const started = useRef(false);
-
-  const partnerName =
-    conversations[0]?.partner?.nickname ?? conversations[0]?.partner?.displayName ?? home?.partner?.nickname ?? 'your partner';
-  const partnerPhoto = conversations[0]?.partner?.avatarUrl ?? home?.partner?.avatarUrl ?? null;
-  const myPhoto = user?.avatarUrl ?? null;
+  const observedCall = useRef(false);
+  const ending = useRef(false);
+  const partner = home?.partner ?? conversations[0]?.partner ?? null;
+  const partnerName = partner?.nickname ?? partner?.displayName ?? 'Partner';
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    // Answering an incoming call already created the session.
-    if (activeCall?.state === 'active') {
-      callId.current = activeCall.callId;
+    if (activeCall?.kind === 'video' && activeCall.state === 'active') {
+      observedCall.current = true;
       return;
     }
-    void startCall('video').then((id) => {
-      callId.current = id;
-    });
-  }, [startCall, activeCall]);
+    if (activeCall?.state === 'ended' && observedCall.current && !ending.current) router.back();
+  }, [activeCall, router]);
 
-  // The call is live only once the other side picked up.
-  const connected = activeCall?.state === 'active';
-
-  useEffect(() => {
-    if (!connected) return;
-    setSeconds(0);
-    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => clearInterval(timer);
-  }, [connected]);
-
-  useEffect(() => {
-    if (activeCall && activeCall.state === 'ended') {
-      toast('The call ended');
-      router.back();
-    }
-  }, [activeCall, router, toast]);
-
-  const end = () => {
-    if (callId.current) void endCall(callId.current);
-    else if (activeCall) void endCall(activeCall.callId);
+  const exit = async () => {
+    ending.current = true;
+    if (activeCall?.callId) await endCall(activeCall.callId);
     router.back();
-    toast('Video call ended');
   };
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#4A3580', '#2A1F50', '#15102A']}
-        start={{ x: 0.2, y: 0 }}
-        end={{ x: 0.8, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      {partnerPhoto ? (
-        <Image source={{ uri: resolveMediaUrl(partnerPhoto) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      ) : null}
-      <LinearGradient
-        colors={['rgba(10,6,22,0.55)', 'rgba(10,6,22,0.15)', 'rgba(10,6,22,0.8)']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={[styles.top, { paddingTop: insets.top + 10 }]}>
-        <PressableScale onPress={() => router.back()} accessibilityLabel="Back">
-          <View style={styles.vcBtn}>
-            <ArrowLeft size={19} strokeWidth={2.4} color="#fff" />
-          </View>
+      <PageBackground />
+      <LinearGradient colors={[t.primaryGhost, 'transparent']} style={styles.topGlow} pointerEvents="none" />
+      <View style={[styles.appbar, { paddingTop: insets.top + 9 }]}>
+        <PressableScale onPress={() => void exit()} accessibilityLabel="Back">
+          <View style={[styles.backButton, { backgroundColor: t.card }]}><ArrowLeft size={19} color={t.text} strokeWidth={2.3} /></View>
         </PressableScale>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.appbarTitle, { color: t.text }]}>Video call</Text>
+          <Text style={[styles.appbarSub, { color: t.text3 }]}>Media unavailable</Text>
+        </View>
+        <View style={[styles.kindIcon, { backgroundColor: t.primarySoft }]}><Video size={18} color={t.primary} /></View>
       </View>
 
-      <Animated.View entering={FadeInDown.delay(200).springify().damping(20)} style={styles.pip}>
-        {myPhoto ? (
-          <Image source={{ uri: resolveMediaUrl(myPhoto) }} style={styles.pipImage} resizeMode="cover" />
-        ) : (
-          <View style={[styles.pipImage, styles.pipFallback]} />
-        )}
-        <View style={styles.pipTag}>
-          <Text style={styles.pipTagText}>You</Text>
-        </View>
-      </Animated.View>
-
-      <Animated.View entering={FadeIn.delay(300)} style={[styles.info, { bottom: insets.bottom + 150 }]}>
-        <Text style={styles.infoName}>{partnerName}</Text>
-        <Text style={styles.infoTimer}>
-          {connected ? format(seconds) : 'Ringing…'}
-        </Text>
-        <View style={styles.hdBadge}>
-          <Text style={styles.hdText}>HD · {connected ? 'Secure' : 'Establishing'}</Text>
-        </View>
-        {!connected ? (
-          <Text style={styles.infoHint}>Waiting for {partnerName} to pick up</Text>
-        ) : null}
-      </Animated.View>
-
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 26 }]}>
-        <PressableScale
-          onPress={() => setVideoOn((v) => !v)}
-          accessibilityLabel={videoOn ? 'Turn camera off' : 'Turn camera on'}
-        >
-          <View style={styles.vcBtn}>
-            {videoOn ? (
-              <Camera size={22} strokeWidth={2} color="#fff" />
-            ) : (
-              <CameraOff size={22} strokeWidth={2} color="#fff" />
-            )}
+      <View style={[styles.body, { paddingBottom: insets.bottom + 18 }]}>
+        <Animated.View entering={FadeIn.duration(450)} style={[styles.stage, { borderColor: t.cardBorder }, shadow('md')]}>
+          <LinearGradient colors={['#f8bfd3', '#e8769c', '#a94069']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <View style={styles.stageGlow} />
+          <View style={styles.stageMark}><Camera size={29} color="#fff" strokeWidth={1.7} /></View>
+          <Text style={styles.stageTitle}>Video is not connected</Text>
+          <Text style={styles.stageText}>This build has no camera stream or media transport, so no live video is shown.</Text>
+          <View style={styles.avatarRow}>
+            <Avatar src={partner?.avatarUrl ?? null} size={46} alt={partnerName} />
+            <View style={styles.heartBridge}><Video size={14} color="#fff" /></View>
+            <Avatar src={null} size={46} alt="You" />
           </View>
-        </PressableScale>
+          <Text style={styles.stageNames}>{partnerName} · You</Text>
+        </Animated.View>
 
-        <PressableScale onPress={end} accessibilityLabel="End video call">
-          <View style={[styles.vcBtn, styles.vcEnd]}>
-            <PhoneOff size={26} strokeWidth={2.2} color="#fff" />
+        <Animated.View entering={FadeInDown.duration(450).delay(100)} style={[styles.infoCard, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('xs')]}>
+          <View style={[styles.infoIcon, { backgroundColor: t.primarySoft }]}><Info size={17} color={t.primary} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.infoTitle, { color: t.text }]}>{activeCall?.kind === 'video' && activeCall.state === 'active' ? 'Request accepted · video unavailable' : 'Video calling needs a media service'}</Text>
+            <Text style={[styles.infoText, { color: t.text2 }]}>Call signalling can notify the other device, but this app version cannot transmit camera or microphone media.</Text>
           </View>
-        </PressableScale>
+        </Animated.View>
 
-        <PressableScale
-          onPress={() => setMuted((v) => !v)}
-          accessibilityLabel={muted ? 'Unmute' : 'Mute'}
-        >
-          <View style={[styles.vcBtn, muted && styles.vcOn]}>
-            {muted ? (
-              <MicOff size={22} strokeWidth={2} color={muted ? '#1a1030' : '#fff'} />
-            ) : (
-              <Mic size={22} strokeWidth={2} color="#fff" />
-            )}
-          </View>
-        </PressableScale>
-
-        <PressableScale onPress={() => setMoreOpen(true)} accessibilityLabel="More options">
-          <View style={styles.vcBtn}>
-            <MoreHorizontal size={22} strokeWidth={2} color="#fff" />
-          </View>
-        </PressableScale>
-      </View>
-
-      <Sheet
-        visible={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title="Video options"
-        subtitle="Switch, share or change how you appear."
-      >
-        <View style={{ gap: 8 }}>
-          {[
-            { key: 'flip', label: 'Flip camera', icon: SwitchCamera },
-            { key: 'fx', label: 'Camera effects', icon: Camera },
-          ].map(({ key, label, icon: Icon }) => (
-            <PressableScale
-              key={key}
-              onPress={() => {
-                setMoreOpen(false);
-                toast(key === 'flip' ? 'Camera flipped' : 'Camera effects coming soon');
-              }}
-              accessibilityLabel={label}
-              style={[styles.option, { backgroundColor: t.fieldBg }]}
-            >
-              <Icon size={16} strokeWidth={2.2} color={t.primary} />
-              <Text style={[styles.optionLabel, { color: t.text }]}>{label}</Text>
+        <View style={styles.actions}>
+          {activeCall?.callId ? (
+            <PressableScale onPress={() => void exit()} accessibilityLabel="End video call request" style={[styles.endButton, { backgroundColor: t.danger }, shadow('sm')]}>
+              <PhoneOff size={22} color="#fff" strokeWidth={2.2} />
             </PressableScale>
-          ))}
+          ) : (
+            <PressableScale onPress={() => router.push(home?.linked ? '/chat' : '/pairing')} accessibilityLabel={home?.linked ? 'Back to chat' : 'Pair with your partner'} style={[styles.primaryAction, { backgroundColor: t.primary }, shadow('primary')]}>
+              <MessageCircle size={17} color="#fff" strokeWidth={2.2} />
+              <Text style={styles.primaryActionText}>{home?.linked ? 'Back to chat' : 'Pair with your partner'}</Text>
+            </PressableScale>
+          )}
+          {activeCall?.callId ? <Text style={[styles.endLabel, { color: t.text2 }]}>End call request</Text> : null}
         </View>
-      </Sheet>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#15102A' },
-  top: { flexDirection: 'row', paddingHorizontal: 18 },
-  vcBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vcEnd: { backgroundColor: '#e5484d', width: 62, height: 62, borderRadius: 31 },
-  vcOn: { backgroundColor: '#fff' },
-  pip: {
-    position: 'absolute',
-    top: 96,
-    right: 18,
-    width: 104,
-    height: 148,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.28)',
-  },
-  pipImage: { width: '100%', height: '100%' },
-  pipFallback: { backgroundColor: 'rgba(255,255,255,0.16)' },
-  pipTag: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: 'rgba(10,6,22,0.55)',
-  },
-  pipTagText: { color: '#fff', fontSize: 9.5, fontWeight: '700' },
-  info: { position: 'absolute', left: 24, alignItems: 'flex-start' },
-  infoName: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.6 },
-  infoHint: {
-    color: 'rgba(255,255,255,0.62)',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  infoTimer: { color: 'rgba(255,255,255,0.78)', fontSize: 13.5, fontWeight: '600', marginTop: 4 },
-  hdBadge: {
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-  },
-  hdText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
-  bottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 18,
-  },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 16 },
-  optionLabel: { fontSize: 13.5, fontWeight: '600' },
+  root: { flex: 1 },
+  topGlow: { position: 'absolute', top: 0, left: 0, right: 0, height: 250 },
+  appbar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 10 },
+  backButton: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  appbarTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
+  appbarSub: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+  kindIcon: { width: 38, height: 38, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  body: { flex: 1, justifyContent: 'center', paddingHorizontal: 18, gap: 14 },
+  stage: { minHeight: 370, borderRadius: 28, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 25 },
+  stageGlow: { position: 'absolute', width: 240, height: 240, borderRadius: 120, backgroundColor: 'rgba(255,255,255,0.14)', top: -95, right: -55 },
+  stageMark: { width: 62, height: 62, borderRadius: 23, backgroundColor: 'rgba(255,255,255,0.19)', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  stageTitle: { color: '#fff', fontSize: 22, lineHeight: 27, fontWeight: '800', textAlign: 'center', letterSpacing: -0.5 },
+  stageText: { color: 'rgba(255,255,255,0.88)', fontSize: 11.5, lineHeight: 17, textAlign: 'center', marginTop: 7, maxWidth: 270 },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 27 },
+  heartBridge: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' },
+  stageNames: { color: 'rgba(255,255,255,0.92)', fontSize: 10.5, fontWeight: '700', marginTop: 10 },
+  infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 11, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
+  infoIcon: { width: 36, height: 36, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  infoTitle: { fontSize: 12.5, lineHeight: 17, fontWeight: '800' },
+  infoText: { fontSize: 10.5, lineHeight: 15, marginTop: 4 },
+  actions: { alignItems: 'center', paddingTop: 6, gap: 8 },
+  endButton: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' },
+  endLabel: { fontSize: 10.5, fontWeight: '700' },
+  primaryAction: { minHeight: 51, borderRadius: 18, paddingHorizontal: 19, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  primaryActionText: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
 });

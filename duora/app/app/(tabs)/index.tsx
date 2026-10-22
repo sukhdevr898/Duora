@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useState } from 'react';
 import {
   Image,
   RefreshControl,
@@ -14,190 +14,140 @@ import {
   ChevronRight,
   Clock3,
   Heart,
-  Link2,
   MessageCircle,
-  MessageSquare,
   NotebookPen,
   Phone,
-  ShieldCheck,
-  Sparkles,
-  Video,
+  Server,
+  type LucideIcon,
 } from 'lucide-react-native';
 import { Avatar } from '../../src/components/Avatar';
 import { BrandWordmark } from '../../src/components/BrandWordmark';
-import { HeartOrb } from '../../src/components/Brand';
 import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
-import { PressableScale, SectionHead } from '../../src/components/ui';
+import { PressableScale } from '../../src/components/ui';
 import { CardSkeleton } from '../../src/components/Skeleton';
 import { RichText } from '../../src/components/RichText';
+import { ErrorCard } from '../../src/components/Feedback';
 import { useDuoraTheme } from '../../src/theme/ThemeProvider';
-import { fonts } from '../../src/theme/fonts';
-import { radii } from '../../src/theme/tokens';
 import { useStore } from '../../src/state/store';
 import { resolveMediaUrl } from '../../src/api/client';
+import { ABSOLUTE_FILL } from '../../src/theme/tokens';
 
-const TILES = [
-  {
-    key: 'chat',
-    title: 'Chat',
-    sub: 'Send messages',
-    icon: MessageSquare,
-    colors: ['#7f5cff', '#5b39ee'],
-    glow: 'rgba(124, 92, 255, 0.14)',
-  },
-  {
-    key: 'call',
-    title: 'Call',
-    sub: 'Voice call',
-    icon: Phone,
-    colors: ['#ff9ecb', '#f0639f'],
-    glow: 'rgba(245, 139, 191, 0.18)',
-  },
-  {
-    key: 'video',
-    title: 'Video Call',
-    sub: 'Face to face',
-    icon: Video,
-    colors: ['#b18dff', '#7b4df6'],
-    glow: 'rgba(124, 92, 255, 0.14)',
-  },
-  {
-    key: 'notes',
-    title: 'Notes',
-    sub: 'Our memories',
-    icon: NotebookPen,
-    colors: ['#ffc38a', '#ff9b6a'],
-    glow: 'rgba(255, 155, 106, 0.18)',
-  },
-] as const;
+const ACTIONS: { key: string; title: string; subtitle: string; icon: LucideIcon }[] = [
+  { key: 'chat', title: 'Chat', subtitle: 'Messages', icon: MessageCircle },
+  { key: 'call', title: 'Call', subtitle: 'Voice request', icon: Phone },
+  { key: 'notes', title: 'Notes', subtitle: 'Memories', icon: NotebookPen },
+  { key: 'calls', title: 'Call logs', subtitle: 'Requests', icon: Clock3 },
+  { key: 'partner', title: 'Partner', subtitle: 'Pairing', icon: Heart },
+  { key: 'server', title: 'Server', subtitle: 'Connection', icon: Server },
+];
 
-type TileSpec = (typeof TILES)[number];
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  if (hour < 21) return 'Good evening';
+  return 'Good night';
+}
 
-/**
- * One quick action tile. Memoised, so the grid does not redraw every time
- * the store ticks.
- */
-const HomeTile = memo(function HomeTile({
+function dayLabel() {
+  return new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
+}
+
+const ActionTile = memo(function ActionTile({
   title,
-  sub,
+  subtitle,
   icon: Icon,
-  colors,
-  glow,
   onPress,
-  card,
-  border,
-  textColor,
-  subColor,
+  tint,
+  text,
+  muted,
   shadowStyle,
 }: {
   title: string;
-  sub: string;
-  icon: TileSpec['icon'];
-  colors: readonly [string, string];
-  glow: string;
+  subtitle: string;
+  icon: LucideIcon;
   onPress: () => void;
-  card: string;
-  border: string;
-  textColor: string;
-  subColor: string;
+  tint: string;
+  text: string;
+  muted: string;
   shadowStyle: object;
 }) {
   return (
     <PressableScale onPress={onPress} accessibilityLabel={title} style={styles.tileWrap}>
-      <View style={[styles.tile, { backgroundColor: card, borderColor: border }, shadowStyle]}>
-        <View style={[styles.tileGlow, { backgroundColor: glow }]} pointerEvents="none" />
-        <LinearGradient
-          colors={colors as [string, string]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.tileIcon}
-        >
-          <Icon size={20} strokeWidth={2.2} color="#fff" />
-        </LinearGradient>
-        <Text style={[styles.tileTitle, { color: textColor }]}>{title}</Text>
-        <Text style={[styles.tileSub, { color: subColor }]}>{sub}</Text>
+      <View style={[styles.tile, { backgroundColor: '#ffffff', borderColor: 'rgba(126,54,82,0.07)' }, shadowStyle]}>
+        <View style={[styles.tileIcon, { backgroundColor: tint }]}>
+          <Icon size={21} strokeWidth={2.15} color={text} />
+        </View>
+        <Text style={[styles.tileTitle, { color: '#27141e' }]}>{title}</Text>
+        <Text style={[styles.tileSub, { color: muted }]}>{subtitle}</Text>
       </View>
     </PressableScale>
   );
 });
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good Morning';
-  if (h < 17) return 'Good Afternoon';
-  if (h < 21) return 'Good Evening';
-  return 'Good Night';
-}
-
-function today() {
-  return new Date().toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  });
-}
-
-function dailyLine() {
-  const hour = new Date().getHours();
-  if (hour < 6) return 'Go back to sleep, I will be here 🌙';
-  if (hour < 11) return 'Good morning to you and to me 💜';
-  if (hour < 14) return 'Have you eaten yet? I am worried about you';
-  if (hour < 18) return 'Thinking about you, always ✨';
-  if (hour < 22) return 'Your evening, my favourite part of the day';
-  return 'Late night, long-distance, still close 💖';
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, shadow } = useDuoraTheme();
-
   const home = useStore((s) => s.home);
   const user = useStore((s) => s.user);
   const refreshAll = useStore((s) => s.refreshAll);
   const dataLoading = useStore((s) => s.dataLoading);
+  const [homeLoading, setHomeLoading] = useState(true);
+  const [homeError, setHomeError] = useState(false);
   const partnerOnline = useStore((s) => s.partnerOnline);
   const partnerTyping = useStore((s) => s.partnerTyping);
   const realtimeConnected = useStore((s) => s.realtimeConnected);
 
-  useFocusEffect(
-    useCallback(() => {
-      void useStore.getState().loadHome();
-      void useStore.getState().loadPairing();
-    }, []),
-  );
-
-  useEffect(() => {
-    void refreshAll();
+  const refreshDashboard = useCallback(async () => {
+    setHomeLoading(true);
+    setHomeError(false);
+    const loaded = await refreshAll();
+    setHomeError(!loaded);
+    setHomeLoading(false);
   }, [refreshAll]);
 
-  const partner = home?.partner ?? null;
-  const linked = Boolean(home?.linked);
-  const streak = home?.streakDays ?? 0;
-  const untilAnniversary = home?.anniversary.daysUntil ?? 0;
-  const together = home?.loveStats.daysTogether ?? '0';
+  useFocusEffect(
+    useCallback(() => {
+      void refreshDashboard();
+      void useStore.getState().loadPairing();
+    }, [refreshDashboard]),
+  );
 
-  const open = (key: (typeof TILES)[number]['key']) => {
+  const partner = home?.partner ?? null;
+  const linked = Boolean(home?.linked && partner);
+  const partnerName = partner?.nickname ?? partner?.displayName ?? '';
+  const latestMoment = home?.moments?.find((moment) => Boolean(moment.image));
+  const presence = partnerTyping
+    ? 'Typing…'
+    : partnerOnline || partner?.online
+      ? 'Online now'
+      : realtimeConnected
+        ? 'Offline'
+        : 'Presence unavailable';
+
+  const openAction = (key: string) => {
     if (key === 'chat') router.push('/chat');
-    if (key === 'call') router.push('/call/audio');
-    if (key === 'video') router.push('/call/video');
-    if (key === 'notes') router.push('/notes');
+    else if (key === 'call') router.push('/call/audio');
+    else if (key === 'notes') router.push('/notes');
+    else if (key === 'calls') router.push('/calls');
+    else if (key === 'partner') router.push('/pairing');
+    else if (key === 'server') router.push('/server');
   };
 
   return (
     <View style={styles.root}>
       <PageBackground />
       <View style={[styles.head, { paddingTop: insets.top + 6 }]}>
-        <BrandWordmark />
+        <View>
+          <BrandWordmark size={22} />
+          <Text style={[styles.tagline, { color: t.text3 }]}>Always Together</Text>
+        </View>
         <View style={styles.headActions}>
-          <ConnectionPill />
-          <PressableScale onPress={() => router.push('/settings')} accessibilityLabel="Your profile">
-            <Avatar
-              src={user?.avatarUrl ?? null}
-              size={36}
-              alt="You"
-            />
+          <ConnectionPill compact />
+          <PressableScale onPress={() => router.push('/settings/profile')} accessibilityLabel="Open your profile">
+            <Avatar src={user?.avatarUrl ?? null} size={38} alt={user?.displayName ?? 'Your profile'} />
           </PressableScale>
         </View>
       </View>
@@ -205,279 +155,167 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={dataLoading} onRefresh={refreshAll} tintColor={t.primary} />
-        }
+        refreshControl={<RefreshControl refreshing={dataLoading || homeLoading} onRefresh={() => void refreshDashboard()} tintColor={t.primary} />}
+        contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.greeting}>
-          <Text style={[styles.greetingText, { color: t.text2 }]}>
-            {greeting()} · {today()}
+          <Text style={[styles.date, { color: t.text2 }]}>{dayLabel()}</Text>
+          <Text style={[styles.greetingTitle, { color: t.text }]}>{greeting()}</Text>
+          <Text style={[styles.greetingSub, { color: t.text2 }]}>
+            {user?.displayName ? `Welcome back, ${user.displayName}` : 'Your Duora space'}
           </Text>
-          <Text style={[styles.greetingStrong, { color: t.text }]}>
-            My Love <RichText text="💖" size={19} />
-          </Text>
-          <RichText text={dailyLine()} size={13} color={t.text3} style={styles.greetingLine} />
         </View>
 
-        {dataLoading && !home ? (
+        {homeLoading && !home ? (
           <View style={styles.skeletonWrap}>
-            <CardSkeleton count={1} height={104} />
-            <CardSkeleton count={2} height={86} />
+            <CardSkeleton count={1} height={190} />
+            <CardSkeleton count={2} height={108} />
           </View>
         ) : null}
 
-        {linked && partner ? (
-          <PressableScale
-            style={styles.heroWrap}
-            onPress={() => router.push('/chat')}
-            accessibilityLabel={`Open chat with ${partner.nickname ?? partner.displayName}`}
-          >
-            <View
-              style={[
-                styles.hero,
-                { backgroundColor: t.card, borderColor: t.cardBorder },
-                shadow('md'),
-              ]}
-            >
-              <View
-                style={[styles.heroGlow, { backgroundColor: t.primaryGhost }]}
-                pointerEvents="none"
+        {homeError && home ? (
+          <View style={{ marginHorizontal: 18, marginBottom: 12 }}>
+            <ErrorCard error={{ kind: 'offline', title: 'Could not refresh your space', message: 'Showing the last information loaded on this device.', action: 'Retry' }} onRetry={() => void refreshDashboard()} />
+          </View>
+        ) : null}
+        {home ? (
+        <PressableScale
+          onPress={() => router.push(linked ? '/chat' : '/pairing')}
+          accessibilityLabel={linked ? `Open your chat with ${partnerName}` : 'Connect your partner'}
+          style={styles.heroWrap}
+        >
+          <View style={[styles.hero, shadow('md')]}>
+            {latestMoment?.image ? (
+              <Image
+                source={{ uri: resolveMediaUrl(latestMoment.image) }}
+                resizeMode="cover"
+                style={styles.heroImage}
               />
-              <Avatar
-                src={partner.avatarUrl}
-                size={56}
-                ring
-                online={partner.online}
-                alt={partner.displayName}
+            ) : (
+              <LinearGradient
+                colors={['#ffc4d8', '#f47aa4', '#d44378']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroImage}
               />
-              <View style={styles.heroMeta}>
-                <View style={styles.heroRow}>
-                  <Text style={[styles.heroName, { color: t.text }]}>
-                    {partner.nickname ?? partner.displayName}
-                  </Text>
-                  <LinearGradient
-                    colors={['#FFE7AE', '#FFCF7A']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.streak}
-                  >
-                    <Heart size={9} fill="#7A4A00" color="#7A4A00" />
-                    <Text style={styles.streakText}>{streak} day streak</Text>
-                  </LinearGradient>
-                  <View
-                    style={[
-                      styles.liveBadge,
-                      {
-                        backgroundColor: realtimeConnected ? `${t.mint}22` : t.chipBg,
-                        borderColor: realtimeConnected ? `${t.mint}55` : t.line,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.liveDot,
-                        { backgroundColor: realtimeConnected ? t.mint : t.text3 },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.liveText,
-                        { color: realtimeConnected ? t.mint : t.text3 },
-                      ]}
-                    >
-                      {realtimeConnected ? 'Live' : 'Offline'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.heroSub, { color: t.text2 }]}>
-                  {partnerTyping
-                    ? 'typing something sweet…'
-                    : partnerOnline || partner.online
-                      ? 'Active now · she’s thinking of you'
-                      : 'Away for a while'}
-                </Text>
-                <View style={styles.heroQuick}>
-                  <View style={[styles.quickAction, { backgroundColor: t.primaryGhost }]}>
-                    <MessageCircle size={12} strokeWidth={2.4} color={t.primary} />
-                    <Text style={[styles.quickText, { color: t.primaryDeep }]}>Message</Text>
-                  </View>
-                  <View style={[styles.quickAction, { backgroundColor: t.primaryGhost }]}>
-                    <Phone size={12} strokeWidth={2.4} color={t.primary} />
-                    <Text style={[styles.quickText, { color: t.primaryDeep }]}>Call</Text>
-                  </View>
-                </View>
+            )}
+            <LinearGradient
+              colors={['rgba(45,12,30,0.08)', 'rgba(45,12,30,0.72)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.heroTop}>
+              <View style={styles.heroLive}>
+                <View style={[styles.liveDot, { backgroundColor: linked && (partnerOnline || partner?.online) ? '#54d897' : 'rgba(255,255,255,0.65)' }]} />
+                <Text style={styles.heroLiveText}>{linked ? presence : 'Not paired yet'}</Text>
               </View>
-              <PressableScale
-                onPress={() => router.push('/pairing')}
-                accessibilityLabel="Pairing details"
-                style={styles.heroGo}
-              >
-                <ChevronRight size={17} strokeWidth={2.4} color={t.primary} />
-              </PressableScale>
-            </View>
-          </PressableScale>
-        ) : (
-          <PressableScale
-            style={styles.heroWrap}
-            onPress={() => router.push('/pairing')}
-            accessibilityLabel="Connect your person"
-          >
-            <View
-              style={[
-                styles.hero,
-                { backgroundColor: t.card, borderColor: t.cardBorder },
-                shadow('md'),
-              ]}
-            >
-              <View
-                style={[styles.heroGlow, { backgroundColor: t.primaryGhost }]}
-                pointerEvents="none"
-              />
-              <View style={[styles.connectIcon, { backgroundColor: t.primaryGhost }]}>
-                <Link2 size={24} strokeWidth={2.2} color={t.primary} />
-              </View>
-              <View style={styles.heroMeta}>
-                <Text style={[styles.heroName, { color: t.text }]}>Connect your person</Text>
-                <Text style={[styles.heroSub, { color: t.text2 }]}>
-                  Pair with a code or QR — takes seconds
-                </Text>
-                <View style={styles.heroQuick}>
-                  <View style={[styles.quickAction, { backgroundColor: t.primaryGhost }]}>
-                    <Sparkles size={12} strokeWidth={2.4} color={t.primary} />
-                    <Text style={[styles.quickText, { color: t.primaryDeep }]}>Pair now</Text>
-                  </View>
-                </View>
+              <View style={styles.heroAvatarWrap}>
+                {partner ? <Avatar src={partner.avatarUrl} size={40} ring online={partnerOnline || partner.online} alt={partnerName} /> : <Heart size={20} color="#fff" fill="rgba(255,255,255,0.28)" />}
               </View>
             </View>
-          </PressableScale>
-        )}
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroKicker}>{greeting()}</Text>
+              <Text style={styles.heroName} numberOfLines={1}>
+                {linked ? partnerName : 'Connect with your partner'}
+              </Text>
+              <Text style={styles.heroSub} numberOfLines={2}>
+                {linked
+                  ? (latestMoment?.title ?? 'Open your conversation and share a moment.')
+                  : 'Share a code or scan a QR to connect your accounts.'}
+              </Text>
+              <View style={styles.heroAction}>
+                <Text style={styles.heroActionText}>{linked ? 'Open chat' : 'Set up pairing'}</Text>
+                <ChevronRight size={15} strokeWidth={2.6} color="#fff" />
+              </View>
+            </View>
+          </View>
+        </PressableScale>
+        ) : !homeLoading ? (
+          <View style={{ marginHorizontal: 18, marginBottom: 16 }}>
+            <ErrorCard error={{ kind: 'offline', title: 'Your space is unavailable', message: 'We could not load your account overview. Check the server connection and retry.', action: 'Retry' }} onRetry={() => void refreshDashboard()} />
+          </View>
+        ) : null}
 
-        <View style={styles.grid}>
-          {TILES.map((tile) => (
-            <HomeTile
-              key={tile.key}
-              title={tile.title}
-              sub={tile.sub}
-              icon={tile.icon}
-              colors={tile.colors}
-              glow={tile.glow}
-              onPress={() => open(tile.key)}
-              card={t.card}
-              border={t.cardBorder}
-              textColor={t.text}
-              subColor={t.text3}
-              shadowStyle={shadow('sm')}
+        <View style={styles.tileGrid}>
+          {ACTIONS.map(({ key, title, subtitle, icon: Icon }, index) => (
+            <ActionTile
+              key={key}
+              title={title}
+              subtitle={subtitle}
+              icon={Icon}
+              onPress={() => openAction(key)}
+              tint={index % 3 === 0 ? '#ffe0eb' : index % 3 === 1 ? '#e5f7ef' : '#fff0d8'}
+              text={index % 3 === 0 ? t.primary : index % 3 === 1 ? '#239e7a' : '#d9912b'}
+              muted={t.text3}
+              shadowStyle={shadow('xs')}
             />
           ))}
         </View>
 
-        <View style={[styles.quote, { backgroundColor: t.surfaceSoft, borderColor: t.cardBorder }, shadow('sm')]}>
-          <View style={[styles.quoteBalloon, { backgroundColor: t.surface }]}>
-            <HeartOrb size={40} tone="violet" />
+        {home ? (
+          <>
+          <View style={styles.sectionHead}>
+          <View>
+            <Text style={[styles.sectionTitle, { color: t.text }]}>Saved memories</Text>
+            <Text style={[styles.sectionSub, { color: t.text3 }]}>Notes saved to your Duora account</Text>
           </View>
-          <Text style={[styles.quoteText, { color: t.text2 }]}>
-            You are <Text style={{ fontWeight: '800', color: t.text }}>my today</Text> and all of{' '}
-            <Text style={{ fontWeight: '800', color: t.text }}>
-              my tomorrows <RichText text="💜" size={13} />
-            </Text>
-          </Text>
+          <PressableScale onPress={() => router.push('/notes')} accessibilityLabel="See all memories" style={styles.seeAll}>
+            <Text style={[styles.seeAllText, { color: t.primary }]}>See all</Text>
+            <ChevronRight size={15} strokeWidth={2.4} color={t.primary} />
+          </PressableScale>
         </View>
 
-        <View style={styles.sectionHead}>
-          <SectionHead
-            title="Our moments"
-            actionLabel="View all"
-            onAction={() => router.push('/notes')}
-          />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.rail}
-          contentContainerStyle={{ paddingRight: 20 }}
-        >
-          {(home?.moments ?? []).map((note) => (
-            <PressableScale
-              key={note.id}
-              onPress={() => router.push('/notes')}
-              accessibilityLabel={note.title}
-              style={styles.railWrap}
-            >
-              <View style={[styles.railCard, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('sm')]}>
-                {note.image ? (
-                  <Image source={{ uri: resolveMediaUrl(note.image) }} style={styles.railImg} />
-                ) : (
-                  <View style={[styles.railImg, { backgroundColor: t.primarySoft }]} />
-                )}
-                <View style={styles.railBody}>
-                  <RichText
-                    text={note.title}
-                    size={13}
-                    color={t.text}
-                    numberOfLines={2}
-                    style={styles.railTitle}
-                  />
-                  <Text style={[styles.railDate, { color: t.text3 }]}>{note.date}</Text>
+        {home.moments.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.momentsRail}>
+            {home.moments.slice(0, 5).map((moment) => (
+              <PressableScale key={moment.id} onPress={() => router.push('/notes')} accessibilityLabel={moment.title}>
+                <View style={[styles.momentCard, { backgroundColor: t.card }, shadow('xs')]}>
+                  {moment.image ? (
+                    <Image source={{ uri: resolveMediaUrl(moment.image) }} style={styles.momentImage} resizeMode="cover" />
+                  ) : (
+                    <LinearGradient colors={['#ffe2ec', '#f6a4bf']} style={styles.momentImage} />
+                  )}
+                  <View style={styles.momentMeta}>
+                    <RichText text={moment.title} size={12} color={t.text} numberOfLines={1} />
+                    <Text style={[styles.momentDate, { color: t.text3 }]}>{moment.date}</Text>
+                  </View>
                 </View>
-              </View>
-            </PressableScale>
-          ))}
-        </ScrollView>
-
-        <View
-          style={[
-            styles.special,
-            { backgroundColor: t.card, borderColor: t.cardBorder },
-            shadow('sm'),
-          ]}
-        >
-          <LinearGradient
-            colors={[t.primary2, t.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.specialCount, shadow('primary')]}
-          >
-            <Text style={styles.specialCountValue}>{untilAnniversary}</Text>
-            <Text style={styles.specialCountLabel}>days</Text>
-          </LinearGradient>
-          <View style={styles.specialMeta}>
-            <Text style={[styles.specialTitle, { color: t.text }]}>Our anniversary</Text>
-            <Text style={[styles.specialSub, { color: t.text2 }]}>
-              {home?.anniversary.date ?? '14 Feb'} · {together} days of us. Plan something small?
-            </Text>
-          </View>
-          <Heart size={17} strokeWidth={2.2} color={t.primary2} fill={t.primarySoft} />
-        </View>
-
-        <View style={[styles.stats, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('sm')]}>
-          {[
-            { icon: Heart, value: together, label: 'days together' },
-            { icon: MessageSquare, value: home?.loveStats.messages ?? '0', label: 'messages' },
-            { icon: Clock3, value: home?.loveStats.callsThisWeek ?? '0m', label: 'calls this week' },
-          ].map(({ icon: Icon, value, label }, index) => (
-            <View
-              key={label}
-              style={[
-                styles.statCell,
-                index > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.line },
-              ]}
-            >
-              <View style={[styles.statIcon, { backgroundColor: t.primaryGhost }]}>
-                <Icon size={13} strokeWidth={2.3} color={t.primary} />
-              </View>
-              <Text style={[styles.statValue, { color: t.text }]}>{value}</Text>
-              <Text style={[styles.statLabel, { color: t.text3 }]}>{label}</Text>
+              </PressableScale>
+            ))}
+          </ScrollView>
+        ) : (
+          <PressableScale onPress={() => router.push('/notes')} accessibilityLabel="Create your first memory" style={[styles.emptyMoments, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
+            <View style={[styles.emptyMomentIcon, { backgroundColor: t.primarySoft }]}>
+              <NotebookPen size={18} strokeWidth={2.1} color={t.primary} />
             </View>
-          ))}
-        </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.emptyMomentTitle, { color: t.text }]}>Start a memory</Text>
+              <Text style={[styles.emptyMomentSub, { color: t.text2 }]}>Save a note or a date that matters to you.</Text>
+            </View>
+            <ChevronRight size={17} color={t.text3} />
+          </PressableScale>
+        )}
+          </>
+        ) : null}
 
-        <View style={styles.footer}>
-          <ShieldCheck size={12} strokeWidth={2.4} color={t.text3} />
-          <Text style={[styles.footerText, { color: t.text3 }]}>
-            Private by default · just you two
-          </Text>
-        </View>
+        {home?.loveStats ? (
+          <View style={[styles.stats, { backgroundColor: t.card, borderColor: t.cardBorder }, shadow('xs')]}>
+            {[
+              { icon: Heart, value: home.loveStats.daysTogether, label: 'days together' },
+              { icon: MessageCircle, value: home.loveStats.messages, label: 'messages' },
+              { icon: Clock3, value: String(home.streakDays), label: 'message streak' },
+            ].map(({ icon: Icon, value, label }, index) => (
+              <View key={label} style={[styles.statCell, index > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.line }]}>
+                <Icon size={15} strokeWidth={2.1} color={t.primary} />
+                <Text style={[styles.statValue, { color: t.text }]}>{value}</Text>
+                <Text style={[styles.statLabel, { color: t.text3 }]}>{label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={{ height: 18 }} />
       </ScrollView>
     </View>
   );
@@ -485,217 +323,52 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 22,
-  },
-  headActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
+  headActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tagline: { marginTop: -2, marginLeft: 35, fontSize: 8.5, fontWeight: '800', letterSpacing: 2.1, textTransform: 'uppercase' },
   scroll: { flex: 1, marginTop: 4 },
-  greeting: { paddingHorizontal: 22, paddingTop: 20, paddingBottom: 15 },
-  greetingText: { fontSize: 14.5, lineHeight: 20, fontWeight: '600', letterSpacing: -0.1 },
-  greetingStrong: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '800',
-    letterSpacing: -0.7,
-    fontFamily: fonts.bold,
-  },
-  greetingLine: { marginTop: 7, fontSize: 12, fontWeight: '600' },
-
-  heroWrap: { marginHorizontal: 20 },
-  hero: {
-    borderRadius: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 15,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-    overflow: 'hidden',
-  },
-  heroGlow: {
-    position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    right: -46,
-    top: -60,
-  },
-  streak: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 22,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    shadowColor: '#d6981e',
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  streakText: { fontSize: 10, fontWeight: '800', color: '#7A4A00' },
-  heroMeta: { flex: 1, minWidth: 0 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  heroName: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
-  heroSub: { fontSize: 11, fontWeight: '600', marginTop: 3 },
-  heroQuick: { flexDirection: 'row', gap: 7, marginTop: 10 },
-  quickAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    height: 30,
-    paddingHorizontal: 11,
-    borderRadius: radii.pill,
-  },
-  quickText: { fontSize: 11, fontWeight: '700' },
-  heroGo: { paddingLeft: 4 },
-  connectIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
+  scrollContent: { paddingBottom: 10 },
+  greeting: { paddingHorizontal: 21, paddingTop: 15, paddingBottom: 15 },
+  date: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
+  greetingTitle: { fontSize: 25, lineHeight: 31, fontWeight: '800', letterSpacing: -0.8, marginTop: 2 },
+  greetingSub: { fontSize: 13, lineHeight: 18, fontWeight: '500', marginTop: 2 },
   skeletonWrap: { paddingHorizontal: 18, gap: 12 },
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    height: 20,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  liveDot: { width: 6, height: 6, borderRadius: 3 },
-  liveText: { fontSize: 9.5, fontWeight: '800', letterSpacing: 0.4 },
-  tileWrap: { width: '48%', marginBottom: 12 },
-  tile: {
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingTop: 15,
-    paddingBottom: 13,
-    overflow: 'hidden',
-  },
-  tileGlow: {
-    position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    right: -30,
-    top: -36,
-  },
-  tileIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  tileTitle: { fontSize: 14.5, fontWeight: '800', letterSpacing: -0.2 },
-  tileSub: { fontSize: 11, fontWeight: '600', marginTop: -2 },
-
-  quote: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 18,
-    borderRadius: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  quoteBalloon: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quoteText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '600', letterSpacing: -0.1 },
-
-  sectionHead: { paddingHorizontal: 22, paddingTop: 20 },
-  rail: { paddingLeft: 20, marginTop: -6 },
-  railWrap: { marginRight: 10 },
-  railCard: {
-    width: 132,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  railImg: { width: '100%', height: 82 },
-  railBody: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10 },
-  railTitle: { fontSize: 11.5, fontWeight: '800', lineHeight: 15, letterSpacing: -0.1 },
-  railDate: { fontSize: 9.5, fontWeight: '700', marginTop: 4 },
-
-  special: {
-    marginHorizontal: 20,
-    marginTop: 14,
-    padding: 14,
-    paddingHorizontal: 16,
-    borderRadius: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  specialCount: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  specialCountValue: { fontSize: 18, fontWeight: '800', color: '#fff', lineHeight: 20 },
-  specialCountLabel: {
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
-  },
-  specialMeta: { flex: 1 },
-  specialTitle: { fontSize: 13, fontWeight: '800', letterSpacing: -0.2 },
-  specialSub: { fontSize: 11, fontWeight: '500', marginTop: 2, lineHeight: 15 },
-
-  stats: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 22,
-    flexDirection: 'row',
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  statCell: { flex: 1, alignItems: 'center', gap: 3, paddingVertical: 12, paddingHorizontal: 6 },
-  statIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  statValue: { fontSize: 14.5, fontWeight: '800', letterSpacing: -0.4 },
-  statLabel: { fontSize: 9.5, fontWeight: '600', letterSpacing: 0.1 },
-
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 18,
-  },
-  footerText: { fontSize: 10.5, fontWeight: '600' },
+  heroWrap: { marginHorizontal: 18, marginBottom: 16 },
+  hero: { height: 208, borderRadius: 26, overflow: 'hidden', justifyContent: 'space-between' },
+  heroImage: { ...ABSOLUTE_FILL, width: '100%', height: '100%' },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 15 },
+  heroLive: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 99, backgroundColor: 'rgba(40,18,30,0.38)', paddingHorizontal: 11, paddingVertical: 7 },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
+  heroLiveText: { color: '#fff', fontSize: 10.5, fontWeight: '700' },
+  heroAvatarWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.22)' },
+  heroCopy: { paddingHorizontal: 18, paddingBottom: 16, maxWidth: '93%' },
+  heroKicker: { color: 'rgba(255,255,255,0.86)', fontSize: 11.5, fontWeight: '700', letterSpacing: 0.2 },
+  heroName: { color: '#fff', fontSize: 23, lineHeight: 28, fontWeight: '800', letterSpacing: -0.6, marginTop: 1 },
+  heroSub: { color: 'rgba(255,255,255,0.9)', fontSize: 11.5, lineHeight: 16, fontWeight: '500', marginTop: 1 },
+  heroAction: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 9, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.23)' },
+  heroActionText: { color: '#fff', fontSize: 10.5, fontWeight: '800' },
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 18, rowGap: 10 },
+  tileWrap: { width: '31.8%' },
+  tile: { minHeight: 102, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, paddingVertical: 11, paddingHorizontal: 4, gap: 3 },
+  tileIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 3 },
+  tileTitle: { fontSize: 12, fontWeight: '800', letterSpacing: -0.2 },
+  tileSub: { fontSize: 9.5, lineHeight: 12, fontWeight: '600' },
+  sectionHead: { paddingHorizontal: 21, paddingTop: 24, paddingBottom: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.45 },
+  sectionSub: { fontSize: 10.5, fontWeight: '500', marginTop: 2 },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  seeAllText: { fontSize: 11.5, fontWeight: '800' },
+  momentsRail: { paddingLeft: 18, paddingRight: 18, gap: 10 },
+  momentCard: { width: 128, borderRadius: 18, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(126,54,82,0.07)' },
+  momentImage: { width: '100%', height: 92 },
+  momentMeta: { paddingHorizontal: 9, paddingTop: 8, paddingBottom: 9 },
+  momentDate: { fontSize: 9.5, fontWeight: '600', marginTop: 4 },
+  emptyMoments: { marginHorizontal: 18, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 13 },
+  emptyMomentIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  emptyMomentTitle: { fontSize: 12.5, fontWeight: '800' },
+  emptyMomentSub: { fontSize: 10.5, lineHeight: 15, marginTop: 2 },
+  stats: { marginHorizontal: 18, marginTop: 15, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', overflow: 'hidden' },
+  statCell: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 12, paddingHorizontal: 4 },
+  statValue: { fontSize: 12.5, fontWeight: '800' },
+  statLabel: { fontSize: 8.5, fontWeight: '600', textAlign: 'center' },
 });

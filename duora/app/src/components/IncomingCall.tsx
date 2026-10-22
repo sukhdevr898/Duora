@@ -48,17 +48,18 @@ export const IncomingCallOverlay = memo(function IncomingCallOverlay() {
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={() => void decline()}>
       <LinearGradient
-        colors={['#2B1D55', '#17102C', '#0D0919']}
+        colors={['#6d294b', '#3a1b2b', '#1d1018']}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={styles.root}
       >
         <View style={[styles.body, { paddingTop: insets.top + 70, paddingBottom: insets.bottom + 48 }]}>
           <Text style={styles.kicker}>
-            {call.kind === 'video' ? 'Incoming video call' : 'Incoming voice call'}
+            {call.kind === 'video' ? 'Incoming video request' : 'Incoming voice request'}
           </Text>
           <Text style={styles.name}>{call.fromName}</Text>
-          <Text style={styles.hint}>Duora is ringing you</Text>
+          <Text style={styles.hint}>A real-time call request from your partner</Text>
+          <Text style={styles.mediaNote}>Audio and video media are not configured in this build.</Text>
 
           <View style={styles.avatarWrap}>
             <PulseRing delay={0} />
@@ -121,16 +122,17 @@ function PulseRing({ delay }: { delay: number }) {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   body: { flex: 1, alignItems: 'center', justifyContent: 'space-between' },
-  kicker: { color: 'rgba(233,222,255,0.7)', fontSize: 12.5, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
+  kicker: { color: 'rgba(255,238,244,0.76)', fontSize: 12.5, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
   name: { color: '#fff', fontSize: 32, fontWeight: '800', letterSpacing: -0.8, marginTop: 8 },
-  hint: { color: 'rgba(233,222,255,0.66)', fontSize: 13, fontWeight: '600', marginTop: 6 },
+  hint: { color: 'rgba(255,238,244,0.78)', fontSize: 12.5, fontWeight: '600', marginTop: 6 },
+  mediaNote: { color: 'rgba(255,238,244,0.64)', fontSize: 10.5, fontWeight: '600', marginTop: 6, textAlign: 'center', maxWidth: 260 },
   avatarWrap: { alignItems: 'center', justifyContent: 'center' },
   ring: {
     position: 'absolute',
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: '#8F6BFF',
+    backgroundColor: '#f4719f',
   },
   avatar: { borderRadius: 66, overflow: 'hidden' },
   actions: { flexDirection: 'row', gap: 46 },

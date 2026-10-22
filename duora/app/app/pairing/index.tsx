@@ -74,8 +74,8 @@ export default function PairingScreen() {
     }
   }, [pairing?.phase]);
 
-  const partnerName = pairing?.partner?.nickname ?? pairing?.partner?.displayName ?? 'ruhi';
-  const partnerFullName = pairing?.partner?.displayName ?? 'Ruhi';
+  const partnerName = pairing?.partner?.nickname ?? pairing?.partner?.displayName ?? 'your partner';
+  const partnerFullName = pairing?.partner?.displayName ?? partnerName;
   const partnerPhoto = pairing?.partner?.avatarUrl ?? home?.partner?.avatarUrl ?? null;
   const myPhoto = user?.avatarUrl ?? null;
 
@@ -89,14 +89,21 @@ export default function PairingScreen() {
     const ok = await acceptCode(code);
     if (ok) {
       setCode('');
-      toast('Paired 💜');
+      toast('Pairing complete', 'success');
     }
   };
 
   const copyCode = async () => {
-    if (!pairing?.code) return;
-    await Clipboard.setStringAsync(pairing.code);
-    toast('Pairing code copied');
+    if (!pairing?.code) {
+      toast('No pairing code is available yet', 'error');
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(pairing.code);
+      toast('Pairing code copied', 'success');
+    } catch {
+      toast('Could not copy the pairing code', 'error');
+    }
   };
 
   /* ---------------- celebration ---------------- */
@@ -132,7 +139,7 @@ export default function PairingScreen() {
           <View style={styles.avatarLink}>
             <Heart size={16} fill={t.primary2} color={t.primary2} />
           </View>
-          <Avatar src={partnerPhoto} size={76} alt={partnerFullName} online />
+          <Avatar src={partnerPhoto} size={76} alt={partnerFullName} />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(350)}>
@@ -141,7 +148,7 @@ export default function PairingScreen() {
             {'\n'}are connected
           </Text>
           <Text style={[styles.matchedSub, { color: t.text2 }]}>
-            Your private space is ready. Chat, call and keep every little memory — just the two of you.
+            Your accounts are connected for Duora messaging. Notes remain saved to your own account.
           </Text>
         </Animated.View>
 
@@ -163,10 +170,10 @@ export default function PairingScreen() {
             }}
           />
           <PressableScale
-            onPress={() => {
+            onPress={async () => {
               setCelebrated(false);
-              void unlink();
-              toast('Connection removed');
+              const removed = await unlink();
+              toast(removed ? 'Connection removed' : 'Could not remove the connection. Try again.', removed ? 'success' : 'error');
             }}
             accessibilityLabel="Unlink this connection"
           >
@@ -204,7 +211,7 @@ export default function PairingScreen() {
                 <View style={styles.avatarLink}>
                   <Heart size={15} fill={t.primary2} color={t.primary2} />
                 </View>
-                <Avatar src={partnerPhoto} size={66} alt={partnerFullName} online />
+                <Avatar src={partnerPhoto} size={66} alt={partnerFullName} />
               </View>
 
               <View style={[styles.matchedPill, { backgroundColor: t.primarySoft }]}>
@@ -214,7 +221,7 @@ export default function PairingScreen() {
 
               <Text style={[styles.pairTitle, { color: t.text }]}>You &amp; {partnerName}</Text>
               <Text style={[styles.pairSub, { color: t.text2 }]}>
-                {`Connected ${since} days ago · locked to two people`}
+                {pairing.matchedAt ? `Connected ${since} days ago` : 'Your accounts are connected'}
               </Text>
 
               <Btn
@@ -231,13 +238,13 @@ export default function PairingScreen() {
                   icon: KeyRound,
                   name: 'Your pairing code',
                   detail: 'Share only with your person',
-                  value: pairing.code ?? '—',
+                  value: pairing.code ?? 'Not available',
                 },
                 { icon: QrCode, name: 'QR pairing', detail: 'Show or scan a code in person' },
                 {
                   icon: ShieldCheck,
-                  name: 'Private by default',
-                  detail: 'Only the two of you can read this space',
+                  name: 'Account protection',
+                  detail: 'Server-side access checks · not end-to-end encrypted',
                 },
               ].map((row, index) => {
                 const Icon = row.icon;
@@ -265,9 +272,9 @@ export default function PairingScreen() {
             </View>
 
             <PressableScale
-              onPress={() => {
-                void unlink();
-                toast('Connection removed — you are unpaired');
+              onPress={async () => {
+                const removed = await unlink();
+                toast(removed ? 'Connection removed' : 'Could not remove the connection. Try again.', removed ? 'success' : 'error');
               }}
               accessibilityLabel="Unlink and pair again"
               style={[styles.unlinkBtn, { backgroundColor: '#fdeef1' }]}
@@ -276,7 +283,7 @@ export default function PairingScreen() {
               <Text style={styles.unlinkText}>Unlink &amp; pair again</Text>
             </PressableScale>
             <Text style={[styles.pairHint, { color: t.text3 }]}>
-              Unlinking removes the shared space on this device. Your memories stay safe.
+              You can create a new pairing code after disconnecting.
             </Text>
           </View>
         </ScrollView>
@@ -302,7 +309,7 @@ export default function PairingScreen() {
               <Link2 size={20} strokeWidth={2.2} color={t.primary} />
             </View>
             <Text style={[styles.introText, { color: t.text2 }]}>
-              One code, one person. Once your partner accepts, your space is locked to the two of you.
+              Create a code for one person. Once they accept, your accounts can exchange Duora messages.
             </Text>
           </View>
 
@@ -383,9 +390,9 @@ export default function PairingScreen() {
               </View>
 
               <PressableScale
-                onPress={() => {
-                  void createCode();
-                  toast('Your pairing code is ready');
+                onPress={async () => {
+                  const created = await createCode();
+                  toast(created ? 'Your pairing code is ready' : (useStore.getState().pairingError ?? 'Could not create a pairing code'), created ? 'success' : 'error');
                 }}
                 accessibilityLabel="Generate my pairing code"
                 style={styles.linkBtn}
@@ -414,7 +421,7 @@ export default function PairingScreen() {
                 </View>
 
                 <Text style={[styles.pairHint, { color: t.text3 }]}>
-                  Show this to {partnerName}, or scan hers. The code rotates for safety.
+                  Share this code with your partner, or scan their QR code.
                 </Text>
 
                 <View style={styles.pairActions}>
@@ -431,9 +438,9 @@ export default function PairingScreen() {
                     icon={RefreshCw}
                     variant="soft"
                     block={false}
-                    onPress={() => {
-                      void createCode();
-                      toast('Refreshed — new code generated');
+                    onPress={async () => {
+                      const created = await createCode();
+                      toast(created ? 'New code generated' : (useStore.getState().pairingError ?? 'Could not refresh the code'), created ? 'success' : 'error');
                     }}
                     style={{ flex: 1 }}
                   />
@@ -447,7 +454,7 @@ export default function PairingScreen() {
                 style={{ marginTop: 14 }}
               />
               <Text style={[styles.pairHint, { color: t.text3, textAlign: 'center', marginTop: 10 }]}>
-                Both on Duora? Add her code instead — it works offline.
+                Your partner can enter this code from their Pairing screen.
               </Text>
             </Animated.View>
           )}
@@ -457,7 +464,7 @@ export default function PairingScreen() {
             {[
               { icon: KeyRound, text: 'Share your 6-character code or QR' },
               { icon: Send, text: 'Your partner accepts the request' },
-              { icon: ShieldCheck, text: 'Your private space is matched' },
+              { icon: ShieldCheck, text: 'Pairing is limited to one partner account' },
             ].map(({ icon: Icon, text }, index) => (
               <View
                 key={text}
@@ -480,7 +487,7 @@ export default function PairingScreen() {
           <View style={styles.footerRow}>
             <LogoHearts size={16} />
             <Text style={[styles.footerText, { color: t.text3 }]}>
-              Only two people can ever be in this space
+              Pairing is limited to one partner account
             </Text>
             <RichText text="💜" size={10} />
           </View>

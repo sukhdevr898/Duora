@@ -60,7 +60,7 @@ export type ChatMessage = {
   type: string;
   createdAt: string;
   time: string;
-  status: 'sent' | 'delivered' | 'read';
+  status: 'pending' | 'sent' | 'delivered' | 'read';
   reactions: string[];
 };
 
