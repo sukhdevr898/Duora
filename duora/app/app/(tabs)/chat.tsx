@@ -6,8 +6,6 @@ import { CardSkeleton } from '../../src/components/Skeleton';
 import { ErrorCard } from '../../src/components/Feedback';
 import { CheckCheck, Link2, MessageCircle, Search, X } from 'lucide-react-native';
 import { Avatar } from '../../src/components/Avatar';
-import { BrandWordmark } from '../../src/components/BrandWordmark';
-import { ConnectionPill } from '../../src/components/ConnectionPill';
 import { PageBackground } from '../../src/components/PageBackground';
 import { Btn, IconButton, PressableScale } from '../../src/components/ui';
 import { RichText } from '../../src/components/RichText';
@@ -65,12 +63,8 @@ export default function ChatsScreen() {
     <View style={styles.root}>
       <PageBackground />
       <View style={[styles.appbar, { paddingTop: insets.top + 10 }]}>
-        <View style={styles.brand}>
-          <BrandWordmark size={22} />
-          <Text style={[styles.tagline, { color: t.text3 }]}>Messages</Text>
-        </View>
+        <Text style={[styles.appbarTitle, { color: t.text }]}>Chats</Text>
         <View style={styles.appbarActions}>
-          <ConnectionPill compact />
           <IconButton
             icon={searching ? X : Search}
             variant={searching ? 'soft' : 'ghost'}
@@ -183,8 +177,7 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   appbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 10 },
-  brand: { gap: 1 },
-  tagline: { fontSize: 10, lineHeight: 13, fontWeight: '600', marginLeft: 35 },
+  appbarTitle: { fontSize: 26, lineHeight: 32, fontWeight: '800', letterSpacing: -0.8 },
   appbarActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   scroll: { flex: 1 },
   content: { paddingHorizontal: 18, paddingBottom: 20 },
